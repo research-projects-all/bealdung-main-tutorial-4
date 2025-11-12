@@ -189,6 +189,7 @@
     </profiles>
 
     <properties>
+        <sonar.organization>research-projects-all</sonar.organization>
         <thymeleaf.version>3.0.9.RELEASE</thymeleaf.version>
         <!-- persistence -->
         <hibernate.version>6.0.10.Final</hibernate.version>
