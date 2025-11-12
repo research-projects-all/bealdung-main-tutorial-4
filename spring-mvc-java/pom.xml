@@ -189,7 +189,13 @@
     </profiles>
 
     <properties>
+    
+        <!-- SonarCloud -->
         <sonar.organization>research-projects-all</sonar.organization>
+        <sonar.projectKey>research-projects-all_spring-mvc-java</sonar.projectKey>
+        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+        <sonar.coverage.jacoco.xmlReportPaths>${project.basedir}/target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+
         <thymeleaf.version>3.0.9.RELEASE</thymeleaf.version>
         <!-- persistence -->
         <hibernate.version>6.0.10.Final</hibernate.version>
