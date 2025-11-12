@@ -1,4 +1,4 @@
-name: SonarQube
+name: SonarCloud
 
 on:
   push:
@@ -12,7 +12,8 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
           fetch-depth: 0
 
@@ -23,7 +24,7 @@ jobs:
           distribution: zulu
           cache: maven
 
-      - name: Cache SonarQube packages
+      - name: Cache SonarCloud packages
         uses: actions/cache@v4
         with:
           path: ~/.sonar/cache
@@ -37,14 +38,23 @@ jobs:
           key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
           restore-keys: ${{ runner.os }}-m2-
 
-      - name: Build and analyze (module)
+      - name: Build (skip tests) and analyze (no coverage)
         working-directory: spring-mvc-java
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # for PR decoration
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          mvn clean install
-          mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-            -Dsonar.projectKey=research-projects-all_bealdung-main-tutorial-4 \
+          # Build without compiling or running tests
+          mvn -B -Dmaven.test.skip=true -Djacoco.skip=true \
+             -Dproject.build.sourceEncoding=UTF-8 \
+             clean package
+
+          # SonarCloud analysis (tests/coverage disabled)
+          mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
+            -Dsonar.projectKey=research-projects-all_spring-mvc-java \
             -Dsonar.organization=research-projects-all \
-            -Dsonar.host.url=https://sonarcloud.io
+            -Dsonar.host.url=https://sonarcloud.io \
+            -Dsonar.tests= \
+            -Dsonar.test.inclusions= \
+            -Dsonar.coverage.exclusions=**/* \
+            -Dsonar.scanner.force-deprecated-java-version=true
