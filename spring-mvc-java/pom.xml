@@ -1,238 +1,134 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
-    xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
-    xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
-    <modelVersion>4.0.0</modelVersion>
-    <artifactId>spring-mvc-java</artifactId>
-    <version>0.1-SNAPSHOT</version>
-    <packaging>war</packaging>
-    <name>spring-mvc-java</name>
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
 
-    <parent>
-        <groupId>com.baeldung</groupId>
-        <artifactId>spring-web-modules</artifactId>
-        <version>0.0.1-SNAPSHOT</version>
-    </parent>
+  <!-- Replace unavailable Baeldung parent with Spring Boot parent -->
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.3.4</version>
+    <relativePath/>
+  </parent>
 
-    <properties>
-        <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  <groupId>com.baeldung</groupId>
+  <artifactId>spring-mvc-java</artifactId>
+  <version>0.1-SNAPSHOT</version>
+  <packaging>war</packaging>
+  <name>spring-mvc-java</name>
 
-        <!-- SonarCloud -->
-        <sonar.organization>research-projects-all</sonar.organization>
-        <sonar.projectKey>research-projects-all_spring-mvc-java</sonar.projectKey>
-        <sonar.host.url>https://sonarcloud.io</sonar.host.url>
-        <sonar.coverage.jacoco.xmlReportPaths>${project.basedir}/target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
+  <properties>
+    <java.version>17</java.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <commons-io.version>2.15.1</commons-io.version>
-        <thymeleaf.version>3.0.9.RELEASE</thymeleaf.version>
-        <hibernate.version>6.0.10.Final</hibernate.version>
-        <mysql-connector-java.version>5.1.40</mysql-connector-java.version>
-        <jsonpath.version>2.2.0</jsonpath.version>
-        <httpcore.version>4.4.5</httpcore.version>
-        <httpclient.version>4.5.2</httpclient.version>
-        <maven-resources-plugin.version>3.1.0</maven-resources-plugin.version>
-        <cargo-maven2-plugin.version>1.6.1</cargo-maven2-plugin.version>
-        <aspectj.version>1.9.1</aspectj.version>
-        <jakarta.el.version>5.0.0-M1</jakarta.el.version>
-        <jakarta.version>6.1.0-M1</jakarta.version>
-        <jakarta-servlet-api.version>4.0.0-M1</jakarta-servlet-api.version>
-        <json-path.version>2.9.0</json-path.version>
-        <start-class>com.baeldung.SpringMVCApplication</start-class>
-        <jakarta-servlet-jstl-version>3.0.0</jakarta-servlet-jstl-version>
-        <rest-assured.version>5.5.0</rest-assured.version>
-    </properties>
+    <!-- SonarCloud -->
+    <sonar.organization>research-projects-all</sonar.organization>
+    <sonar.projectKey>research-projects-all_spring-mvc-java</sonar.projectKey>
+    <sonar.host.url>https://sonarcloud.io</sonar.host.url>
+    <sonar.coverage.jacoco.xmlReportPaths>${project.basedir}/target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
 
-    <dependencies>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-web</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-tomcat</artifactId>
-        </dependency>
+    <!-- Only pin what Boot doesn't manage -->
+    <commons-io.version>2.15.1</commons-io.version>
+    <rest-assured.version>5.5.0</rest-assured.version>
+    <json-path.version>2.9.0</json-path.version>
+  </properties>
 
-        <dependency>
-            <groupId>jakarta.servlet</groupId>
-            <artifactId>jakarta.servlet-api</artifactId>
-            <version>${jakarta.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>jakarta.servlet.jsp</groupId>
-            <artifactId>jakarta.servlet.jsp-api</artifactId>
-            <version>${jakarta-servlet-api.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>jakarta.servlet.jsp.jstl</groupId>
-            <artifactId>jakarta.servlet.jsp.jstl-api</artifactId>
-            <version>${jakarta-servlet-jstl-version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.apache.tomcat.embed</groupId>
-            <artifactId>tomcat-embed-jasper</artifactId>
-            <scope>provided</scope>
-        </dependency>
+  <dependencies>
+    <!-- Web -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
 
-        <!-- common -->
-        <dependency>
-            <groupId>commons-io</groupId>
-            <artifactId>commons-io</artifactId>
-            <version>${commons-io.version}</version>
-        </dependency>
+    <!-- WAR packaging: deploy to external Tomcat; keep embedded Tomcat as provided -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-tomcat</artifactId>
+      <scope>provided</scope>
+    </dependency>
 
-        <!-- Thymeleaf -->
-        <dependency>
-            <groupId>org.thymeleaf</groupId>
-            <artifactId>thymeleaf-spring4</artifactId>
-            <version>${thymeleaf.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.thymeleaf</groupId>
-            <artifactId>thymeleaf</artifactId>
-            <version>${thymeleaf.version}</version>
-        </dependency>
+    <!-- JSP/JSTL on Boot 3 -->
+    <dependency>
+      <groupId>org.apache.tomcat.embed</groupId>
+      <artifactId>tomcat-embed-jasper</artifactId>
+      <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>jakarta.servlet.jsp.jstl</groupId>
+      <artifactId>jakarta.servlet.jsp.jstl-api</artifactId>
+      <version>3.0.0</version>
+    </dependency>
+    <dependency>
+      <groupId>org.glassfish.web</groupId>
+      <artifactId>jakarta.servlet.jsp.jstl</artifactId>
+      <version>3.0.1</version>
+    </dependency>
 
-        <!-- Test deps (kept; CI skips tests so these won't be compiled) -->
-        <dependency>
-            <groupId>com.jayway.jsonpath</groupId>
-            <artifactId>json-path</artifactId>
-            <version>${json-path.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>org.springframework.boot</groupId>
-            <artifactId>spring-boot-starter-test</artifactId>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>io.rest-assured</groupId>
-            <artifactId>rest-assured</artifactId>
-            <version>${rest-assured.version}</version>
-            <scope>test</scope>
-        </dependency>
+    <!-- Validation: Boot-managed starter brings Hibernate Validator + EL -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
 
-        <!-- Validation -->
-        <dependency>
-            <groupId>org.hibernate.validator</groupId>
-            <artifactId>hibernate-validator</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.glassfish</groupId>
-            <artifactId>jakarta.el</artifactId>
-            <version>${jakarta.el.version}</version>
-        </dependency>
-    </dependencies>
+    <!-- Thymeleaf: replaces legacy thymeleaf-spring4 -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-thymeleaf</artifactId>
+    </dependency>
 
-    <build>
-        <finalName>spring-mvc-java</finalName>
+    <!-- Commons IO (explicit version) -->
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+      <version>${commons-io.version}</version>
+    </dependency>
 
-        <resources>
-            <resource>
-                <directory>src/main/resources</directory>
-                <filtering>true</filtering>
-            </resource>
-        </resources>
+    <!-- Test (CI skips them, but keeping deps is fine) -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>io.rest-assured</groupId>
+      <artifactId>rest-assured</artifactId>
+      <version>${rest-assured.version}</version>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>com.jayway.jsonpath</groupId>
+      <artifactId>json-path</artifactId>
+      <version>${json-path.version}</version>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
 
-        <plugins>
-            <!-- Compile targeting Java 8 language level on JDK 17 -->
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-compiler-plugin</artifactId>
-                <version>3.13.0</version>
-                <configuration>
-                    <release>8</release>
-                    <encoding>UTF-8</encoding>
-                </configuration>
-            </plugin>
+  <build>
+    <finalName>spring-mvc-java</finalName>
+    <resources>
+      <resource>
+        <directory>src/main/resources</directory>
+        <filtering>true</filtering>
+      </resource>
+    </resources>
+    <plugins>
+      <!-- Spring Boot plugin (even though we build a WAR) -->
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
 
-            <plugin>
-                <artifactId>maven-resources-plugin</artifactId>
-                <version>${maven-resources-plugin.version}</version>
-            </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-war-plugin</artifactId>
+        <configuration>
+          <failOnMissingWebXml>false</failOnMissingWebXml>
+        </configuration>
+      </plugin>
+    </plugins>
+  </build>
 
-            <plugin>
-                <groupId>org.apache.maven.plugins</groupId>
-                <artifactId>maven-war-plugin</artifactId>
-                <configuration>
-                    <failOnMissingWebXml>false</failOnMissingWebXml>
-                </configuration>
-            </plugin>
-
-            <plugin>
-                <groupId>org.codehaus.cargo</groupId>
-                <artifactId>cargo-maven2-plugin</artifactId>
-                <version>${cargo-maven2-plugin.version}</version>
-                <configuration>
-                    <container>
-                        <containerId>jetty8x</containerId>
-                        <type>embedded</type>
-                        <systemProperties/>
-                    </container>
-                    <configuration>
-                        <properties>
-                            <cargo.servlet.port>8082</cargo.servlet.port>
-                        </properties>
-                    </configuration>
-                </configuration>
-            </plugin>
-        </plugins>
-    </build>
-
-    <profiles>
-        <profile>
-            <id>live</id>
-            <build>
-                <plugins>
-                    <plugin>
-                        <groupId>org.apache.maven.plugins</groupId>
-                        <artifactId>maven-surefire-plugin</artifactId>
-                        <version>3.2.5</version>
-                        <executions>
-                            <execution>
-                                <phase>integration-test</phase>
-                                <goals>
-                                    <goal>test</goal>
-                                </goals>
-                                <configuration>
-                                    <excludes>
-                                        <exclude>**/*IntegrationTest.java</exclude>
-                                        <exclude>**/*IntTest.java</exclude>
-                                    </excludes>
-                                    <includes>
-                                        <include>**/*LiveTest.java</include>
-                                    </includes>
-                                </configuration>
-                            </execution>
-                        </executions>
-                        <configuration>
-                            <systemPropertyVariables>
-                                <test.mime>json</test.mime>
-                            </systemPropertyVariables>
-                        </configuration>
-                    </plugin>
-
-                    <plugin>
-                        <groupId>org.codehaus.cargo</groupId>
-                        <artifactId>cargo-maven2-plugin</artifactId>
-                        <executions>
-                            <execution>
-                                <id>start-server</id>
-                                <phase>pre-integration-test</phase>
-                                <goals>
-                                    <goal>start</goal>
-                                </goals>
-                            </execution>
-                            <execution>
-                                <id>stop-server</id>
-                                <phase>post-integration-test</phase>
-                                <goals>
-                                    <goal>stop</goal>
-                                </goals>
-                            </execution>
-                        </executions>
-                    </plugin>
-                </plugins>
-            </build>
-        </profile>
-    </profiles>
+  <!-- The old Cargo/Jetty profile was removed: Jetty8 is EOL and breaks on JDK 17.
+       CI does not need an app server to compile/analyze. -->
 </project>
