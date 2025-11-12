@@ -6,7 +6,7 @@ on:
   pull_request:
     branches: [ main, master ]
   schedule:
-    - cron: '25 6 * * 1'  # weekly
+    - cron: '25 6 * * 1'
 
 permissions:
   contents: read
@@ -23,23 +23,21 @@ jobs:
         working-directory: spring-mvc-java
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Set up JDK
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: '17'  # match your build JDK
+          java-version: '17'
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@v3
         with:
           languages: java
 
-      # Either let CodeQL auto-build, or do a manual Maven build.
-      - name: Build with Maven (skip tests for speed)
-        run: mvn -B -DskipTests package
+      - name: Build with Maven (no tests, no live profile)
+        run: mvn -B -P '!live' -DskipTests package
 
       - name: Perform CodeQL Analysis
         uses: github/codeql-action/analyze@v3
