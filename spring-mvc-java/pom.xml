@@ -189,7 +189,7 @@
     </profiles>
 
     <properties>
-    
+        <commons-io.version>2.15.1</commons-io.version>
         <!-- SonarCloud -->
         <sonar.organization>research-projects-all</sonar.organization>
         <sonar.projectKey>research-projects-all_spring-mvc-java</sonar.projectKey>
