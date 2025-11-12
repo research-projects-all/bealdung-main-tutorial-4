@@ -15,25 +15,23 @@
     </parent>
 
     <properties>
-        <!-- Quiet encoding warnings -->
         <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
 
-        <!-- existing properties from your file -->
-        <commons-io.version>2.15.1</commons-io.version>
+        <!-- SonarCloud -->
         <sonar.organization>research-projects-all</sonar.organization>
         <sonar.projectKey>research-projects-all_spring-mvc-java</sonar.projectKey>
         <sonar.host.url>https://sonarcloud.io</sonar.host.url>
         <sonar.coverage.jacoco.xmlReportPaths>${project.basedir}/target/site/jacoco/jacoco.xml</sonar.coverage.jacoco.xmlReportPaths>
 
+        <commons-io.version>2.15.1</commons-io.version>
         <thymeleaf.version>3.0.9.RELEASE</thymeleaf.version>
         <hibernate.version>6.0.10.Final</hibernate.version>
         <mysql-connector-java.version>5.1.40</mysql-connector-java.version>
         <jsonpath.version>2.2.0</jsonpath.version>
         <httpcore.version>4.4.5</httpcore.version>
         <httpclient.version>4.5.2</httpclient.version>
-        <maven-resources-plugin.version>2.7</maven-resources-plugin.version>
-        <cargo-maven2-plugin.version>1.6.1</cargo-maven2-plugin.version>
         <maven-resources-plugin.version>3.1.0</maven-resources-plugin.version>
+        <cargo-maven2-plugin.version>1.6.1</cargo-maven2-plugin.version>
         <aspectj.version>1.9.1</aspectj.version>
         <jakarta.el.version>5.0.0-M1</jakarta.el.version>
         <jakarta.version>6.1.0-M1</jakarta.version>
@@ -53,6 +51,7 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-tomcat</artifactId>
         </dependency>
+
         <dependency>
             <groupId>jakarta.servlet</groupId>
             <artifactId>jakarta.servlet-api</artifactId>
@@ -93,7 +92,7 @@
             <version>${thymeleaf.version}</version>
         </dependency>
 
-        <!-- Tests (kept, but CI skips compiling/running them) -->
+        <!-- Test deps (kept; CI skips tests so these won't be compiled) -->
         <dependency>
             <groupId>com.jayway.jsonpath</groupId>
             <artifactId>json-path</artifactId>
@@ -135,7 +134,7 @@
         </resources>
 
         <plugins>
-            <!-- Remove Java 8 bootstrap path warning on JDK 17 by compiling with --release 8 -->
+            <!-- Compile targeting Java 8 language level on JDK 17 -->
             <plugin>
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-compiler-plugin</artifactId>
@@ -167,8 +166,7 @@
                     <container>
                         <containerId>jetty8x</containerId>
                         <type>embedded</type>
-                        <systemProperties>
-                        </systemProperties>
+                        <systemProperties/>
                     </container>
                     <configuration>
                         <properties>
@@ -188,7 +186,7 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-surefire-plugin</artifactId>
-                        <version>${maven-surefire-plugin.version}</version>
+                        <version>3.2.5</version>
                         <executions>
                             <execution>
                                 <phase>integration-test</phase>
