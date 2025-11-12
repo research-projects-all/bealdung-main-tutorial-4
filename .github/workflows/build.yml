@@ -43,6 +43,7 @@ jobs:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} # for PR decoration
         run: |
+          mvn clean install
           mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
             -Dsonar.projectKey=research-projects-all_bealdung-main-tutorial-4 \
             -Dsonar.organization=research-projects-all \
