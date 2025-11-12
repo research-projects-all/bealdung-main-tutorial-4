@@ -1,36 +1,54 @@
-name: SonarQube
+name: SonarCloud
+
 on:
   push:
-    branches:
-      - main
+    branches: [ main, master ]
   pull_request:
     types: [opened, synchronize, reopened]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pull-requests: read
+
 jobs:
-  build:
-    name: Build and analyze
+  sonar:
+    name: SonarCloud Scan
     runs-on: ubuntu-latest
+
+    defaults:
+      run:
+        working-directory: spring-mvc-java
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # Shallow clones should be disabled for a better relevancy of analysis
-      - name: Set up JDK 17
+          fetch-depth: 0  # full history helps with blame/PR decoration
+
+      - name: Set up JDK
         uses: actions/setup-java@v4
         with:
-          java-version: 17
-          distribution: 'zulu' # Alternative distribution options are available.
-      - name: Cache SonarQube packages
+          distribution: temurin
+          java-version: '17'
+
+      - name: Cache Maven repo
         uses: actions/cache@v4
         with:
-          path: ~/.sonar/cache
-          key: ${{ runner.os }}-sonar
-          restore-keys: ${{ runner.os }}-sonar
-      - name: Cache Maven packages
-        uses: actions/cache@v4
-        with:
-          path: ~/.m2
-          key: ${{ runner.os }}-m2-${{ hashFiles('**/pom.xml') }}
-          restore-keys: ${{ runner.os }}-m2
-      - name: Build and analyze
+          path: ~/.m2/repository
+          key: m2-${{ runner.os }}-${{ hashFiles('**/pom.xml') }}
+          restore-keys: m2-${{ runner.os }}-
+
+      # Run tests to produce coverage (JaCoCo) before sonar:sonar
+      - name: Build & Test (with coverage)
+        run: mvn -B clean verify
+
+      - name: SonarCloud Analysis
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=research-projects-all_bealdung-main-tutorial-4
+        run: >
+          mvn -B sonar:sonar
+          -Dsonar.projectKey=research-projects-all_spring-mvc-java
+          -Dsonar.organization=research-projects-all
+          -Dsonar.host.url=https://sonarcloud.io
+          -Dsonar.login=${SONAR_TOKEN}
