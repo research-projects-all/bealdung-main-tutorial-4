@@ -43,16 +43,4 @@ jobs:
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: |
-          mvn -B -Dmaven.test.skip=true -Djacoco.skip=true \
-             -Dproject.build.sourceEncoding=UTF-8 \
-             clean package
-
-          mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-            -Dsonar.projectKey=research-projects-all_spring-mvc-java \
-            -Dsonar.organization=research-projects-all \
-            -Dsonar.host.url=https://sonarcloud.io \
-            -Dsonar.tests= \
-            -Dsonar.test.inclusions= \
-            -Dsonar.coverage.exclusions=**/* \
-            -Dsonar.scanner.force-deprecated-java-version=true
+        run: mvn -B verify org.sonarsource.scanner.maven:sonar-maven-plugin:sonar -Dsonar.projectKey=research-projects-all_bealdung-main-tutorial-4
