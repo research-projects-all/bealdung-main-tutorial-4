@@ -51,7 +51,7 @@ jobs:
 
           # SonarCloud analysis, with tests/coverage disabled
           mvn -B org.sonarsource.scanner.maven:sonar-maven-plugin:sonar \
-            -Dsonar.projectKey=research-projects-all_spring-mvc-java \
+            -Dsonar.projectKey=research-projects-all_bealdung-main-tutorial-4 \
             -Dsonar.organization=research-projects-all \
             -Dsonar.host.url=https://sonarcloud.io \
             -Dsonar.tests= \
