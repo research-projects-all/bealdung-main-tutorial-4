@@ -3,13 +3,13 @@ rules:
   - id: POS-escape-path-var
     pattern-either:
       - pattern: |
-          @GetMapping("/...")
+          @GetMapping("...")
           public String $METHOD(@PathVariable String $X) {
             ...
             return $X;
           }
       - pattern: |
-          @GetMapping("/...")
+          @GetMapping("...")
           public String $METHOD(@RequestParam String $X) {
             ...
             return $X;
@@ -85,7 +85,7 @@ rules:
     pattern: |
       $RET = $REPO.findById($ID);
     message: |
-      🔒  **Beginner safety**: verify current user owns $ID before returning $RET.
+      🔒  **Beginner safety**: verify the **current user** owns $ID before returning $RET.
       Example:  `if (!currentUser.getId().equals($ID)) throw new AccessDeniedException();`
     severity: ERROR
     languages: [java]

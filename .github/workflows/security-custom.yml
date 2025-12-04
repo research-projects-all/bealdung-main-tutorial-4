@@ -1,4 +1,4 @@
-name: Security-Full-Summary    # custom + positive, console only
+name: Security-Full-Summary
 
 on:
   push:
@@ -14,25 +14,22 @@ jobs:
       - name: Install Semgrep
         run: pip install semgrep
 
-           # ---------- 1. Custom 70-rule set ----------
       - name: Run custom Spring rules
         run: |
           echo "🔍 Scanning custom rule-set (70 rules)..."
           semgrep --config=.semgrep/spring-custom.yml \
                   --error \
                   --output=custom.txt \
-                  .  # <-- scan root
+                  .  # scan root
 
-      # ---------- 2. Positive 7-rule set ----------
       - name: Run beginner positive rules
         run: |
           echo "🔍 Scanning positive rule-set (7 rules)..."
           semgrep --config=.semgrep/spring-positive.yml \
                   --error \
                   --output=positive.txt \
-                  .  # <-- scan root
+                  .  # scan root
 
-      # ---------- 3. Console summary ----------
       - name: Generate summary
         if: always()
         run: |
