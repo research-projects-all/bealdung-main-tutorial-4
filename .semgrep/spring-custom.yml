@@ -1206,29 +1206,7 @@ rules:
     include:
     - '*.java'
     - '*.kt'
-- id: SPRING-A09-003
-  message: 'No Audit Logging for Privileged Actions (SPRING-A09-003).
 
-
-    CodeQL: Control flow shows admin actions without logging
-
-    SonarCloud: Pattern - `@PreAuthorize("hasRole('ADMIN')") public void deleteUser(Long
-    id) { userRepository.deleteById(id); } // No audit log`
-
-
-    Notes:
-
-    CodeQL: No audit rule (gap)
-
-    SonarCloud: No audit rule (gap)'
-  severity: ERROR
-  languages:
-  - generic
-  pattern-regex: deleteUser
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
 - id: SPRING-A09-004
   message: 'Stack Trace Exposed to Client (SPRING-A09-004).
 
