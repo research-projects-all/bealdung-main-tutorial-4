@@ -1,14 +1,12 @@
-rules:
-  - id: SPRING-POS-escape-output
+  - id: POS-escape-path-var
     pattern-either:
       - pattern: |
-          model.addAttribute("...", $X);
-          return "...";
-      - pattern: |
-          return "...${...}";
-    message: "POSITIVE RULE: every user attribute written to view must be escaped (th:text / c:out / HtmlUtils)"
+          @GetMapping("/...")
+          public String $METHOD(@PathVariable String $X) {
+            ...
+            return $X;
+          }
+      - pattern-regex: '\$\{[^}]*\}'   # catches ${id} in JSP/HTML
+    message: "🔒  **Beginner safety**: returning the user parameter directly causes **XSS**."
     severity: ERROR
-    languages: [java, jsp]
-    fix-regex:
-      regex: '\$\{([^}]*)\}'
-      replacement: '${spring:escapeHtml($1)}'
+    languages: [java, html]   # <-- fixed token

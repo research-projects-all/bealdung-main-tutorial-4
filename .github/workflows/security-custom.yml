@@ -1,17 +1,12 @@
-name: Security-Full-Report    # custom + positive in one shot
+name: Security-Full-Summary    # custom + positive, console only
 
 on:
   push:
     branches: [ main, develop ]
   pull_request:
 
-permissions:
-  contents: read
-  security-events: write
-  pull-requests: write
-
 jobs:
-  full-scan:
+  scan:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -19,64 +14,57 @@ jobs:
       - name: Install Semgrep
         run: pip install semgrep
 
-      # ---------- 1.  CUSTOM 70-rule set  ----------
+      # ---------- 1. Custom 70-rule set ----------
       - name: Run custom Spring rules
-        id: custom
         run: |
+          echo "🔍 Scanning custom rule-set (70 rules)..."
           semgrep --config=.semgrep/spring-custom.yml \
-                  --sarif-output=custom.sarif \
+                  --error \
                   --output=custom.txt \
                   src/ || true
 
-      # ---------- 2.  POSITIVE 7-rule set  ----------
-      - name: Run positive (must-pass) rules
-        id: positive
+      # ---------- 2. Positive 7-rule set ----------
+      - name: Run beginner positive rules
         run: |
+          echo "🔍 Scanning positive rule-set (7 rules)..."
           semgrep --config=.semgrep/spring-positive.yml \
-                  --sarif-output=positive.sarif \
+                  --error \
                   --output=positive.txt \
                   src/ || true
 
-      # ---------- 3.  UPLOAD SARIF (two sets) ----------
-      - name: Upload custom SARIF
+      # ---------- 3. Console summary ----------
+      - name: Generate summary
         if: always()
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: custom.sarif
-          category: custom-spring
-
-      - name: Upload positive SARIF
-        if: always()
-        uses: github/codeql-action/upload-sarif@v4
-        with:
-          sarif_file: positive.sarif
-          category: positive-spring
-
-      # ---------- 4.  FINAL GATE – fail if ANY rule hit  ----------
-      - name: Gate (fail if any issue)
         run: |
-          # non-zero exit code if either file has content
-          if [ -s custom.txt ] || [ -s positive.txt ]; then
-            echo "❌ Security rules fired – see reports above"
-            exit 1
-          fi
+          echo "=============================================="
+          echo "    SECURITY SCAN SUMMARY"
+          echo "=============================================="
+          echo ""
 
-      # ---------- 5.  PR COMMENT (readable summary)  ----------
-      - name: Comment PR (readable)
-        if: failure() && github.event_name == 'pull_request'
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const fs   = require('fs');
-            const cust = fs.existsSync('custom.txt')   ? fs.readFileSync('custom.txt','utf8')   : '';
-            const pos  = fs.existsSync('positive.txt') ? fs.readFileSync('positive.txt','utf8') : '';
-            const head = `| Rule Set | Status | Details |
-                        |----------|--------|---------|
-                        | Custom (70 rules)   | ${cust ? '❌ FAILED' : '✅ PASSED'} | ${cust ? '<pre>'+cust+'</pre>' : 'All clear'} |
-                        | Positive (7 rules)  | ${pos  ? '❌ FAILED' : '✅ PASSED'} | ${pos  ? '<pre>'+pos +'</pre>' : 'All clear'} |`;
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: head
-            });
+          # Custom rules summary
+          if [ -s custom.txt ]; then
+            echo "❌ CUSTOM RULES (70) – FAILED:"
+            cat custom.txt
+            echo ""
+          else
+            echo "✅ CUSTOM RULES (70) – PASSED"
+          fi
+          echo "----------------------------------------------"
+
+          # Positive rules summary
+          if [ -s positive.txt ]; then
+            echo "❌ POSITIVE RULES (7) – FAILED:"
+            cat positive.txt
+            echo ""
+          else
+            echo "✅ POSITIVE RULES (7) – PASSED"
+          fi
+          echo "=============================================="
+
+          # Exit 1 if any rule failed
+          if [ -s custom.txt ] || [ -s positive.txt ]; then
+            echo "💥 BUILD FAILED – fix issues or add # nosemgrep justification"
+            exit 1
+          else
+            echo "🎉 BUILD PASSED – all security rules satisfied"
+          fi
