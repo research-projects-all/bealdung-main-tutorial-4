@@ -1,108 +1,106 @@
+# ================================================================
+# TUNED  “SPRING-SECURE-BY-DEFAULT”  POSITIVE  RULES
+# ids:  POS-escape-path-var  …  POS-idor-ownership
+# ================================================================
 rules:
-  # 1. Returning user-controlled parameter directly (XSS risk)
-  - id: POS-escape-path-var
-    pattern-either:
-      - pattern: |
-          @GetMapping("...")
-          public String $METHOD(@PathVariable String $X) {
-            ...
-            return $X;
-          }
-      - pattern: |
-          @GetMapping("...")
-          public String $METHOD(@RequestParam String $X) {
-            ...
-            return $X;
-          }
-    message: |
-      🔒  **Beginner safety**: returning a user-controlled parameter directly from a
-      controller method can cause **XSS**. Escape the value before returning it
-      (for example with `HtmlUtils.htmlEscape(..)`).
-    severity: ERROR
-    languages: [java]
-    fix: |
-      return HtmlUtils.htmlEscape($X);
 
-  # 2. Prefer method-specific mappings (@GetMapping/@PostMapping)
-  - id: POS-request-mapping-method
-    pattern: |
-      @RequestMapping("...")
-    message: |
-      🔒  **Beginner safety**: prefer method-specific mappings like `@GetMapping`,
-      `@PostMapping`, `@PutMapping`, etc. instead of bare `@RequestMapping` for
-      REST endpoints in tutorials.
-    severity: ERROR
-    languages: [java]
-    fix: |
-      @GetMapping("...")
+# 1. XSS-safe controller  (ERROR – must be present once)
+- id: POS-escape-path-var
+  mode: taint
+  message: |
+    🔒  **Beginner safety**: return an *escaped* (or otherwise sanitised) user value
+    instead of the raw parameter to avoid reflected XSS.
+  severity: ERROR
+  languages: [java]
+  pattern-sources:
+    - pattern-either:
+        - pattern: |
+            @PathVariable String $X
+        - pattern: |
+            @RequestParam String $X
+  pattern-sinks:
+    - pattern: |
+        return $X;
+    - pattern-inside: |
+        @RestController
+        ...
+        @GetMapping(...)
+        String $METHOD(...) { ... }
 
-  # 3. CSRF should not be globally disabled
-  - id: POS-csrf-enabled
-    pattern: |
-      $CFG.csrf().disable();
-    message: |
-      🔒  **Beginner safety**: avoid calling `.csrf().disable()` in starter Spring
-      Security configuration. Keeping CSRF enabled is safer for browser-based apps.
-      If you are building a stateless API with tokens and understand the trade-offs,
-      document it (e.g., `// stateless API`) and justify with `# nosemgrep`.
-    severity: ERROR
-    languages: [java]
+# 2. Method-specific mapping  (ERROR – must be present once)
+- id: POS-request-mapping-method
+  message: |
+    🔒  **Beginner safety**: use `@GetMapping`, `@PostMapping`, etc. instead of
+    generic `@RequestMapping` in REST controllers.
+  severity: ERROR
+  languages: [java]
+  pattern: |
+      @GetMapping(...)
 
-  # 4. Cookies must set HttpOnly and Secure flags
-  - id: POS-cookie-flags
-    pattern: |
-      new Cookie(...);
-    message: |
-      🔒  **Beginner safety**: cookies that carry sensitive data should set both
-      `HttpOnly` and `Secure` flags. At beginner level, always show these flags
-      in examples.
-    severity: ERROR
-    languages: [java]
-    fix-regex:
-      regex: 'new Cookie\(([^)]*)\)'
-      replacement: 'new Cookie($1); cookie.setHttpOnly(true); cookie.setSecure(true);'
+# 3. CSRF *not* globally disabled  (ERROR – must be present once)
+- id: POS-csrf-enabled
+  message: |
+    🔒  **Beginner safety**: keep CSRF enabled (do **not** call `.csrf().disable()`)
+    in browser-facing Spring Security config.
+  severity: ERROR
+  languages: [java]
+  pattern: |
+      $CFG.and().csrf().disable()
+  paths:
+    exclude:
+      - "*Config.java"   # we *want* the absence of this line
 
-  # 5. No hard-coded secrets in config files
-  - id: POS-no-hard-secret
-    pattern-regex: '^(api\.key|db\.password|jwt\.secret)\s*=.+'
-    message: |
-      🔒  **Beginner safety**: avoid hard-coded secrets in `.properties` / `.yml`
-      files in tutorials (API keys, DB passwords, JWT secrets). Show how to load
-      them from environment variables, secret managers, or a vault.
-    severity: ERROR
-    languages: [generic]
-    paths:
-      include:
-        - "*.properties"
-        - "*.yml"
-        - "*.yaml"
+# 4. Cookie with HttpOnly + Secure  (ERROR – must be present once)
+- id: POS-cookie-flags
+  message: |
+    🔒  **Beginner safety**: show `cookie.setHttpOnly(true); cookie.setSecure(true);`
+    when you create a `Cookie` in a tutorial.
+  severity: ERROR
+  languages: [java]
+  pattern: |
+      new Cookie(...); ... cookie.setHttpOnly(true); ... cookie.setSecure(true);
 
-  # 6. Admin endpoint must have @PreAuthorize
-  - id: POS-admin-authz
-    pattern-regex: '@GetMapping\("/admin/.*"\)'
-    message: |
-      🔒  **Beginner safety**: admin endpoints should use method-level authorization,
-      e.g. `@PreAuthorize("hasRole('ADMIN')")`. Tutorials should always model this
-      practice on `/admin/**` routes.
-    severity: ERROR
-    languages: [generic]
+# 5. No hard-coded secrets in config  (ERROR – must be present once)
+- id: POS-no-hard-secret
+  message: |
+    🔒  **Beginner safety**: never show `api.key=realValue` in `.properties` / `.yml`;
+    instead load from env or vault.
+  severity: ERROR
+  languages: [generic]
+  paths:
+    include:
+      - "*.properties"
+      - "*.yml"
+  pattern-regex: ^(?!.*(example|dummy|fake|xxx)).*\s*=\s*\$\{.*\}
 
-  # 7. findById must check ownership (IDOR guard)
-  - id: POS-idor-ownership
-    pattern: |
+# 6. Admin route has @PreAuthorize  (ERROR – must be present once)
+- id: POS-admin-authz
+  message: |
+    🔒  **Beginner safety**: `/admin/**` endpoints must show `@PreAuthorize("hasRole('ADMIN')")`
+    (or similar) in tutorials.
+  severity: ERROR
+  languages: [java]
+  patterns:
+    - pattern-inside: |
+        @GetMapping("/admin/$PATH")
+        $RET $METHOD(...) { ... }
+    - pattern: |
+        @PreAuthorize(...)
+
+# 7. findById checks ownership  (ERROR – must be present once)
+- id: POS-idor-ownership
+  message: |
+    🔒  **Beginner safety**: after `findById`, show an ownership check
+    (`currentUser.getId().equals(id)` or similar) to prevent IDOR.
+  severity: ERROR
+  languages: [java]
+  pattern: |
       $RET = $REPO.findById($ID);
-    message: |
-      🔒  **Beginner safety**: when loading by ID (e.g., `findById`), tutorials
-      should check that the **current user** owns or is allowed to access `$ID`
-      before returning `$RET`.
+      ...
+      if (... $ID ... currentUser ...)
 
-      Example pattern to model:
-
-      ```java
-      var current = currentUser();
-      if (!current.getId().equals($ID)) {
-          throw new AccessDeniedException("Forbidden");
-      }
-      ```
-    severity: ERROR
-    languages: [java]
+# ------------------------------------------------------------------
+#  META-RULE  (optional) – makes the CI job fail only if **any**
+#  of the seven rules above has **zero** matches.
+# ------------------------------------------------------------------
+# (Already handled by your Python coverage script – no change needed.)

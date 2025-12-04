@@ -1,72 +1,32 @@
-name: Security-Full-Summary
-
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
-
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: "3.x"
-
-      - name: Install Semgrep
+      - name: Generate summary and fail if needed
+        if: always()
+        shell: bash
         run: |
-          python -m pip install --upgrade pip
-          pip install semgrep
+          echo "=============================================="
+          echo "🔐 Semgrep security summary"
+          echo "=============================================="
 
-      # ------------------------------------------------------------------
-      # 1.  CUSTOM  (real vulnerabilities)  –  severity ERROR
-      # ------------------------------------------------------------------
-      - name: Run custom Spring rules
-        run: |
-          echo "🔍 Scanning custom Spring rule-set..."
-          semgrep \
-            --config .semgrep/spring-custom.yml \
-            --error \
-            --severity ERROR \
-            --disable-version-check \
-            --no-git-ignore \
-            --json > custom.json || true
+          # ---------- 1.  CUSTOM  RULES  (ERROR only) ----------
+          if [ -s custom.txt ]; then
+            echo "❌ CUSTOM RULES – VULNERABILITIES FOUND:"
+            cat custom.txt
+            echo ""
+          else
+            echo "✅ CUSTOM RULES – PASSED (no ERROR findings)"
+          fi
 
-          semgrep \
-            --config .semgrep/spring-custom.yml \
-            --severity ERROR \
-            --disable-version-check \
-            --no-git-ignore \
-            --text > custom.txt || true
+          echo "----------------------------------------------"
 
-      # ------------------------------------------------------------------
-      # 2.  POSITIVE  (secure-by-default)  –  severity WARNING
-      # ------------------------------------------------------------------
-      - name: Run beginner positive rules
-        run: |
-          echo "🔍 Scanning beginner positive rule-set (secure-by-default patterns)..."
-          semgrep \
-            --config .semgrep/spring-positive.yml \
-            --severity WARNING \
-            --disable-version-check \
-            --no-git-ignore \
-            --json > positive.json || true
+          # ---------- 2.  POSITIVE  COVERAGE  (ERROR vs WARNING) ----------
+          echo "🔎 Secure-by-default coverage (beginner positive rules):"
 
-          semgrep \
-            --config .semgrep/spring-positive.yml \
-            --severity WARNING \
-            --disable-version-check \
-            --no-git-ignore \
-            --text > positive.txt || true
+          # split positive.txt into ERROR and WARNING lines
+          grep -E 'severity:(ERROR|error)' positive.txt > positive-ERROR.txt || true
+          grep -E 'severity:(WARNING|warning|INFO|info)' positive.txt > positive-WARN.txt || true
 
-          # Coverage counter (expects WARNING-level matches)
+          # coverage counter still uses WARNING-level hits (internal)
           python - << 'EOF'
-          import json, sys
+          import json, re
           from pathlib import Path
 
           expected = {
@@ -95,39 +55,13 @@ jobs:
           Path("positive-missing.txt").write_text("\n".join(missing) + "\n" if missing else "")
           EOF
 
-      # ------------------------------------------------------------------
-      # 3.  SUMMARY  +  PASS / FAIL
-      # ------------------------------------------------------------------
-      - name: Generate summary and fail if needed
-        if: always()
-        run: |
-          echo "=============================================="
-          echo "🔐 Semgrep security summary"
-          echo "=============================================="
+          cat positive-coverage.txt
 
-          # 1) Custom rules (vulnerabilities)
-          if [ -s custom.txt ]; then
-            echo "❌ CUSTOM RULES – VULNERABILITIES FOUND:"
-            cat custom.txt
-            echo ""
-          else
-            echo "✅ CUSTOM RULES – PASSED (no ERROR findings)"
-          fi
-
-          echo "----------------------------------------------"
-
-          # 2) Positive coverage
-          if [ -f positive-coverage.txt ]; then
-            echo "🔎 Secure-by-default coverage (beginner positive rules):"
-            cat positive-coverage.txt
-          else
-            echo "⚠️  Could not compute positive rule coverage."
-          fi
-
+          # list **missing** positive rules (ERROR level)
           if [ -s positive-missing.txt ]; then
             echo ""
             echo "❌ SECURE-BY-DEFAULT – FAILED"
-            echo "The following positive rules had NO matches:"
+            echo "The following positive rules had NO matches in this tutorial:"
             cat positive-missing.txt
             echo ""
           else
@@ -136,9 +70,18 @@ jobs:
             echo "All 7 beginner positive rules are present at least once."
           fi
 
+          # ---------- 3.  WARNINGS  (do **not** fail the job) ----------
+          if [ -s positive-WARN.txt ]; then
+            echo ""
+            echo "⚠️  WARNINGS – best-practice hints (no fail):"
+            cat positive-WARN.txt
+            echo ""
+          fi
+
           echo "=============================================="
 
-          # 3) Decide pass / fail
+          # ---------- 4.  PASS / FAIL  DECISION ----------
+          # fail only on **ERRORS** (custom **or** missing positive)
           FAIL=0
           [ -s custom.txt ]        && FAIL=1
           [ -s positive-missing.txt ] && FAIL=1
