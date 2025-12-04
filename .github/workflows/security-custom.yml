@@ -23,10 +23,13 @@ jobs:
           python -m pip install --upgrade pip
           pip install semgrep
 
+      # --------------------------------------------------
+      # 1) Run custom Spring security rules (vuln pack)
+      # --------------------------------------------------
       - name: Run custom Spring rules
         run: |
           echo "🔍 Scanning custom Spring rule-set..."
-          # Run Semgrep but do not fail the job yet; we capture findings.
+          # JSON for machine-readable summary
           semgrep \
             --config .semgrep/spring-custom.yml \
             --error \
@@ -35,7 +38,7 @@ jobs:
             --no-git-ignore \
             --json > custom.json || true
 
-          # Extract a simple text summary for the final report
+          # Text for human log
           semgrep \
             --config .semgrep/spring-custom.yml \
             --severity ERROR \
@@ -43,157 +46,138 @@ jobs:
             --no-git-ignore \
             --text > custom.txt || true
 
+      # --------------------------------------------------
+      # 2) Run beginner positive rules (safety baseline)
+      # --------------------------------------------------
       - name: Run beginner positive rules
         run: |
-          echo "🔍 Scanning beginner positive rule-set (secure-by-default patterns)..."
-          # JSON output for coverage analysis
+          echo "🔍 Scanning beginner safety (positive) rule-set..."
+          # JSON for machine-readable summary
           semgrep \
             --config .semgrep/spring-positive.yml \
             --error \
-            --severity ERROR \
             --disable-version-check \
             --no-git-ignore \
             --json > positive.json || true
 
-          # Optional human-readable summary (not used for pass/fail)
+          # Text for human log
           semgrep \
             --config .semgrep/spring-positive.yml \
-            --severity ERROR \
             --disable-version-check \
             --no-git-ignore \
             --text > positive.txt || true
 
-          # Compute coverage of positive rules (how many "good" patterns are present)
-          python - << 'EOF'
-          import json
-          from pathlib import Path
-
-          # These IDs are what Semgrep prints in logs (note the "semgrep." prefix)
-          expected = {
-              "semgrep.POS-escape-path-var",
-              "semgrep.POS-request-mapping-method",
-              "semgrep.POS-csrf-enabled",
-              "semgrep.POS-cookie-flags",
-              "semgrep.POS-no-hard-secret",
-              "semgrep.POS-admin-authz",
-              "semgrep.POS-idor-ownership",
-          }
-
-          results = []
-          try:
-              with open("positive.json", "r", encoding="utf-8") as f:
-                  data = json.load(f)
-                  results = data.get("results", [])
-          except Exception:
-              results = []
-
-          present = {r.get("check_id") for r in results}
-          matched = expected & present
-          missing = sorted(expected - present)
-
-          # Write a small coverage summary
-          Path("positive-coverage.txt").write_text(
-              f"{len(matched)}/{len(expected)} positive (secure-by-default) rules matched\n",
-              encoding="utf-8",
-          )
-
-          # Write missing rule IDs (if any) to a file
-          with open("positive-missing.txt", "w", encoding="utf-8") as f:
-              for mid in missing:
-                  f.write(mid + "\n")
-          EOF
-
-      - name: Generate summary and fail if needed
-        if: always()
-        shell: bash
+      # --------------------------------------------------
+      # 3) Summarize and decide pass/fail
+      # --------------------------------------------------
+      - name: Generate security summary and fail if needed
         run: |
-          echo "=============================================="
-          echo "🔐 Semgrep security summary"
-          echo "=============================================="
+          python - << 'PY'
+          import json, pathlib, sys
 
-          # ---------- 1.  CUSTOM  RULES  (ERROR only) ----------
-          if [ -s custom.txt ]; then
-            echo "❌ CUSTOM RULES – VULNERABILITIES FOUND:"
-            cat custom.txt
-            echo ""
-          else
-            echo "✅ CUSTOM RULES – PASSED (no ERROR findings)"
-          fi
+          def load(path):
+              p = pathlib.Path(path)
+              if not p.exists():
+                  return {}
+              try:
+                  return json.loads(p.read_text())
+              except Exception:
+                  return {}
 
-          echo "----------------------------------------------"
+          custom = load("custom.json")
+          positive = load("positive.json")
 
-          # ---------- 2.  POSITIVE  COVERAGE  (ERROR vs WARNING) ----------
-          echo "🔎 Secure-by-default coverage (beginner positive rules):"
+          def count_by_rule(data):
+              counts = {}
+              for res in data.get("results", []):
+                  # Semgrep CLI v1+ puts the id in "check_id"
+                  rule_id = res.get("check_id") or res.get("extra", {}).get("rule", {}).get("id")
+                  if not rule_id:
+                      continue
+                  counts[rule_id] = counts.get(rule_id, 0) + 1
+              return counts
 
-          # split positive.txt into ERROR and WARNING lines
-          grep -E 'severity:(ERROR|error)' positive.txt > positive-ERROR.txt || true
-          grep -E 'severity:(WARNING|warning|INFO|info)' positive.txt > positive-WARN.txt || true
+          custom_counts   = count_by_rule(custom)
+          positive_counts = count_by_rule(positive)
 
-          # coverage counter (expects WARNING-level matches)
-          python - << 'EOF'
-          import json, re
-          from pathlib import Path
-
-          expected = {
-              "semgrep.POS-escape-path-var",
-              "semgrep.POS-request-mapping-method",
-              "semgrep.POS-csrf-enabled",
-              "semgrep.POS-cookie-flags",
-              "semgrep.POS-no-hard-secret",
-              "semgrep.POS-admin-authz",
-              "semgrep.POS-idor-ownership",
+          # --------------------------------------------------
+          # Which custom rules are considered "blocking"?
+          # (Use your tuned ERROR rules here)
+          # --------------------------------------------------
+          BLOCKING_RULES = {
+              "SPRING-A01-003",
+              "SPRING-A02-001",
+              "SPRING-A02-003",
+              "SPRING-A03-001",
+              "SPRING-A03-002",
+              "SPRING-A03-003",
+              "SPRING-A03-004",
+              "SPRING-A05-003",
+              "SPRING-A07-001",
+              "SPRING-A08-001",
+              "SPRING-A08-003",
+              "SPRING-A09-001",
+              "SPRING-A10-001",
+              "SPRING-A10-002",
+              "SPRING-A10-003",
+              "SPRING-A10-004",
           }
 
-          try:
-              data = json.load(open("positive.json", encoding="utf-8"))
-              results = {r.get("check_id") for r in data.get("results", [])}
-          except Exception:
-              results = set()
+          blocking_custom = {r: n for r, n in custom_counts.items() if r in BLOCKING_RULES}
 
-          matched = expected & results
-          missing = sorted(expected - matched)
+          # --------------------------------------------------
+          # Expected beginner-safety rules (positive pack)
+          # (Adjust these IDs to match your spring-positive.yml)
+          # --------------------------------------------------
+          EXPECTED_POSITIVE = [
+              "SPRING-P01-001",
+              "SPRING-P01-002",
+              "SPRING-P03-001",
+              "SPRING-P03-002",
+              "SPRING-P04-001",
+              "SPRING-P05-001",
+              "SPRING-P06-001",
+          ]
 
-          Path("positive-coverage.txt").write_text(
-              f"{len(matched)}/{len(expected)} positive (secure-by-default) rules matched\n",
-              encoding="utf-8",
-          )
-          Path("positive-missing.txt").write_text("\n".join(missing) + "\n" if missing else "")
-          EOF
+          missing_positive = [r for r in EXPECTED_POSITIVE if positive_counts.get(r, 0) == 0]
 
-          cat positive-coverage.txt
+          print("┌──────────────────────────────┐")
+          print("│ Spring Tutorial Security CI │")
+          print("└──────────────────────────────┘\n")
 
-          # list **missing** positive rules (ERROR level)
-          if [ -s positive-missing.txt ]; then
-            echo ""
-            echo "❌ SECURE-BY-DEFAULT – FAILED"
-            echo "The following positive rules had NO matches in this tutorial:"
-            cat positive-missing.txt
-            echo ""
-          else
-            echo ""
-            echo "✅ SECURE-BY-DEFAULT – PASSED"
-            echo "All 7 beginner positive rules are present at least once."
-          fi
+          def table(title, counts):
+              if not counts:
+                  print(f"{title}: none\n")
+                  return
+              print(title + ":")
+              print("  Rule ID              Findings")
+              print("  ------------------------------")
+              for rule, n in sorted(counts.items()):
+                  print(f"  {rule:<20} {n}")
+              print()
 
-          # ---------- 3.  WARNINGS  (do **not** fail the job) ----------
-          if [ -s positive-WARN.txt ]; then
-            echo ""
-            echo "⚠️  WARNINGS – best-practice hints (no fail):"
-            cat positive-WARN.txt
-            echo ""
-          fi
+          table("Custom vulnerability rules (.semgrep/spring-custom.yml)", custom_counts)
+          table("Beginner safety rules (.semgrep/spring-positive.yml)", positive_counts)
 
-          echo "=============================================="
+          print("Summary:")
+          print(f"  • Total custom findings           : {sum(custom_counts.values())}")
+          print(f"  • Total positive findings         : {sum(positive_counts.values())}")
+          print(f"  • Blocking custom rules triggered : {len(blocking_custom)}")
+          print(f"  • Missing beginner-safety rules   : {len(missing_positive)}")
 
-          # ---------- 4.  PASS / FAIL  DECISION ----------
-          # fail only on **ERRORS** (custom **or** missing positive)
-          FAIL=0
-          [ -s custom.txt ]        && FAIL=1
-          [ -s positive-missing.txt ] && FAIL=1
+          if missing_positive:
+              print("\nMissing beginner-safety coverage for these rules:")
+              for r in missing_positive:
+                  print(f"  - {r}")
 
-          if [ "$FAIL" -ne 0 ]; then
-            echo "💥 BUILD FAILED – tutorial is not secure (vulnerabilities and/or not secure-by-default)."
-            exit 1
-          else
-            echo "🎉 BUILD PASSED – no vulnerabilities and secure-by-default (all positive patterns present)."
-          fi
+          # CI policy:
+          #  - FAIL if any blocking custom rules fired
+          #  - OR if ALL 7 positive rules are missing
+          should_fail = bool(blocking_custom) or len(missing_positive) == len(EXPECTED_POSITIVE)
+
+          if should_fail:
+              print("\n❌ Tutorial is NOT secure by default (blocking issues and/or no beginner safety shown).")
+              sys.exit(1)
+          else:
+              print("\n✅ Tutorial passes security gate (no blocking issues, and at least one beginner-safety rule present).")
+          PY

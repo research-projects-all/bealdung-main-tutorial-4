@@ -1,106 +1,160 @@
-# ================================================================
-# TUNED  “SPRING-SECURE-BY-DEFAULT”  POSITIVE  RULES
-# ids:  POS-escape-path-var  …  POS-idor-ownership
-# ================================================================
 rules:
 
-# 1. XSS-safe controller  (ERROR – must be present once)
-- id: POS-escape-path-var
-  mode: taint
-  message: |
-    🔒  **Beginner safety**: return an *escaped* (or otherwise sanitised) user value
-    instead of the raw parameter to avoid reflected XSS.
-  severity: ERROR
-  languages: [java]
-  pattern-sources:
-    - pattern-either:
-        - pattern: |
-            @PathVariable String $X
-        - pattern: |
-            @RequestParam String $X
-  pattern-sinks:
-    - pattern: |
-        return $X;
-    - pattern-inside: |
-        @RestController
-        ...
-        @GetMapping(...)
-        String $METHOD(...) { ... }
+# ================================================================
+# SPRING "BEGINNER POSITIVE" (SECURE-BY-DEFAULT) RULES
+# These are *good* patterns. Your GitHub Action checks whether all
+# of these appear at least once in the tutorial repo.
+#
+# expected IDs in the workflow:
+#   - semgrep.POS-escape-path-var
+#   - semgrep.POS-request-mapping-method
+#   - semgrep.POS-csrf-enabled
+#   - semgrep.POS-cookie-flags
+#   - semgrep.POS-no-hard-secret
+#   - semgrep.POS-admin-authz
+#   - semgrep.POS-idor-ownership
+# ================================================================
 
-# 2. Method-specific mapping  (ERROR – must be present once)
-- id: POS-request-mapping-method
-  message: |
-    🔒  **Beginner safety**: use `@GetMapping`, `@PostMapping`, etc. instead of
-    generic `@RequestMapping` in REST controllers.
+# 1) POS-admin-authz: admin-style endpoints use method-level auth
+- id: POS-admin-authz
+  message: >-
+    Admin-style endpoints use method-level authorization (@PreAuthorize or @Secured).
   severity: ERROR
   languages: [java]
-  pattern: |
-      @GetMapping(...)
-
-# 3. CSRF *not* globally disabled  (ERROR – must be present once)
-- id: POS-csrf-enabled
-  message: |
-    🔒  **Beginner safety**: keep CSRF enabled (do **not** call `.csrf().disable()`)
-    in browser-facing Spring Security config.
-  severity: ERROR
-  languages: [java]
-  pattern: |
-      $CFG.and().csrf().disable()
   paths:
+    include:
+      - "src/main/java/**"
     exclude:
-      - "*Config.java"   # we *want* the absence of this line
+      - ".semgrep/**"
+      - ".github/**"
+      - "**/*.md"
+  pattern-either:
+    - pattern: |
+        @PreAuthorize(..)
+        @GetMapping("$PATH")
+        $RET $M(..) { ... }
+    - pattern: |
+        @GetMapping("$PATH")
+        @PreAuthorize(..)
+        $RET $M(..) { ... }
+    - pattern: |
+        @Secured(..)
+        @GetMapping("$PATH")
+        $RET $M(..) { ... }
+    - pattern: |
+        @GetMapping("$PATH")
+        @Secured(..)
+        $RET $M(..) { ... }
+  metavariable-regex:
+    metavariable: $PATH
+    regex: .*(?i)(admin|manage|management|internal|system|config).*
 
-# 4. Cookie with HttpOnly + Secure  (ERROR – must be present once)
-- id: POS-cookie-flags
-  message: |
-    🔒  **Beginner safety**: show `cookie.setHttpOnly(true); cookie.setSecure(true);`
-    when you create a `Cookie` in a tutorial.
+
+# 2) POS-request-mapping-method: explicit HTTP methods on RequestMapping
+- id: POS-request-mapping-method
+  message: >-
+    @RequestMapping specifies explicit HTTP method(s) instead of accepting all verbs.
   severity: ERROR
   languages: [java]
+  paths:
+    include:
+      - "src/main/java/**"
+    exclude:
+      - ".semgrep/**"
+      - ".github/**"
+      - "**/*.md"
   pattern: |
-      new Cookie(...); ... cookie.setHttpOnly(true); ... cookie.setSecure(true);
+    @RequestMapping(value = "$PATH", method = RequestMethod.$METHOD)
+    $RET $M(..) { ... }
 
-# 5. No hard-coded secrets in config  (ERROR – must be present once)
+
+# 3) POS-csrf-enabled: CSRF protection explicitly configured (not disabled)
+- id: POS-csrf-enabled
+  message: >-
+    CSRF protection is explicitly configured (e.g., csrfTokenRepository set).
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - "src/main/java/**"
+    exclude:
+      - ".semgrep/**"
+      - ".github/**"
+      - "**/*.md"
+  pattern: |
+    http.csrf().csrfTokenRepository(...)
+
+
+# 4) POS-cookie-flags: cookies set with HttpOnly and Secure
+- id: POS-cookie-flags
+  message: >-
+    Example shows setting cookies with HttpOnly and Secure flags.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - "src/main/java/**"
+    exclude:
+      - ".semgrep/**"
+      - ".github/**"
+      - "**/*.md"
+  pattern: |
+    ResponseCookie.from($NAME, $VALUE)
+      .httpOnly(true)
+      .secure(true)
+      ...
+
+
+# 5) POS-no-hard-secret: secrets loaded from configuration / env, not hard-coded
 - id: POS-no-hard-secret
-  message: |
-    🔒  **Beginner safety**: never show `api.key=realValue` in `.properties` / `.yml`;
-    instead load from env or vault.
+  message: >-
+    Secrets are loaded from configuration or environment (e.g., @Value("${…}") or Environment).
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - "src/main/java/**"
+    exclude:
+      - ".semgrep/**"
+      - ".github/**"
+      - "**/*.md"
+  pattern-either:
+    - pattern: |
+        @Value("${$KEY}")
+        $T $FIELD;
+    - pattern: |
+        $ENV.getProperty("$KEY")
+
+
+# 6) POS-escape-path-var: server-side rendering uses escaped output (th:text)
+- id: POS-escape-path-var
+  message: >-
+    HTML templates use escaped output (th:text) instead of raw HTML (th:utext).
   severity: ERROR
   languages: [generic]
   paths:
     include:
-      - "*.properties"
-      - "*.yml"
-  pattern-regex: ^(?!.*(example|dummy|fake|xxx)).*\s*=\s*\$\{.*\}
+      - "src/main/resources/templates/**"
+      - "**/*.html"
+      - "**/*.jsp"
+    exclude:
+      - ".semgrep/**"
+      - ".github/**"
+      - "**/*.md"
+  pattern-regex: th:text="\$\{[^}]+\}"
 
-# 6. Admin route has @PreAuthorize  (ERROR – must be present once)
-- id: POS-admin-authz
-  message: |
-    🔒  **Beginner safety**: `/admin/**` endpoints must show `@PreAuthorize("hasRole('ADMIN')")`
-    (or similar) in tutorials.
-  severity: ERROR
-  languages: [java]
-  patterns:
-    - pattern-inside: |
-        @GetMapping("/admin/$PATH")
-        $RET $METHOD(...) { ... }
-    - pattern: |
-        @PreAuthorize(...)
 
-# 7. findById checks ownership  (ERROR – must be present once)
+# 7) POS-idor-ownership: repository access checks user / owner in the query
 - id: POS-idor-ownership
-  message: |
-    🔒  **Beginner safety**: after `findById`, show an ownership check
-    (`currentUser.getId().equals(id)` or similar) to prevent IDOR.
+  message: >-
+    Repository lookups bind the resource ID to an owner/user to mitigate IDOR.
   severity: ERROR
   languages: [java]
-  pattern: |
-      $RET = $REPO.findById($ID);
-      ...
-      if (... $ID ... currentUser ...)
-
-# ------------------------------------------------------------------
-#  META-RULE  (optional) – makes the CI job fail only if **any**
-#  of the seven rules above has **zero** matches.
-# ------------------------------------------------------------------
-# (Already handled by your Python coverage script – no change needed.)
+  paths:
+    include:
+      - "src/main/java/**"
+    exclude:
+      - ".semgrep/**"
+      - ".github/**"
+      - "**/*.md"
+  pattern-regex: '\.findByIdAnd(Owner|User)[A-Za-z0-9_]*\('
