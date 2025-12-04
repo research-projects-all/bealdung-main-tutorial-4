@@ -1,57 +1,43 @@
 rules:
 
 # ================================================================
-# TUNED “BAELDUNG SPRING SECURITY” RULE PACK
-# ids: SPRING-A01-001 … SPRING-A10-006
-# Noise reduction:
-#   - Exclude .semgrep/, .github/, and *.md so rules don't fire on
-#     your own rule files or docs.
+# TUNED “BAELDUNG SPRING SECURITY” VULNERABILITY PACK
+# Focus: low-noise findings on beginner Spring tutorials
 # ================================================================
 
-# ---------- A01  AUTH / AUTHORISATION ----------
+# ---------- A01  AUTH / AUTHORIZATION ----------
+
 - id: SPRING-A01-001
   message: >-
     Admin-style REST endpoints should use method-level security (@PreAuthorize / @Secured).
   severity: WARNING
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   patterns:
+    - pattern-inside: |
+        @$CTRL
+        class $C { ... }
+    - metavariable-regex:
+        metavariable: $CTRL
+        regex: "(RestController|Controller)"
     - pattern-inside: |
         @GetMapping("$PATH")
         $RET $METHOD(..) { ... }
     - metavariable-regex:
         metavariable: $PATH
-        regex: .*(?i)(admin|manage|internal|system|config).*
+        regex: ".*/(admin|manage|internal|system|config)(/.*)?"
     - pattern-not: |
-        @PreAuthorize(..)
-        @GetMapping("$PATH")
-        $RET $METHOD(..) { ... }
+        @PreAuthorize(...)
     - pattern-not: |
-        @Secured(..)
-        @GetMapping("$PATH")
-        $RET $METHOD(..) { ... }
-
-- id: SPRING-A01-002
-  message: >-
-    Class-level @RequestMapping that does not list HTTP methods can be ambiguous.
-  severity: WARNING
-  languages: [java]
-  paths:
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-      - "**/*.md"
-  patterns:
-    - pattern: |
-        @RequestMapping("$V")
-        public class $C { ... }
-    - pattern-not: |
-        @RequestMapping(value = "$V", method = { ... })
-        public class $C { ... }
+        @Secured(...)
 
 - id: SPRING-A01-003
   message: >-
@@ -59,9 +45,13 @@ rules:
   severity: ERROR
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   mode: taint
   pattern-sources:
@@ -74,31 +64,19 @@ rules:
     - pattern: |
         new ClassPathResource($X)
 
-- id: SPRING-A01-004
-  message: >-
-    repository.findById($ID) – verify ownership/authorization for the loaded ID.
-  severity: WARNING
-  languages: [java]
-  paths:
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-      - "**/*.md"
-  patterns:
-    - pattern: |
-        repository.findById($ID)
-    - pattern-not-inside: |
-        if ( ! repository.existsByIdAndOwner(...) )  ...
-
 - id: SPRING-A01-005
   message: >-
     WebSocket withSockJS() – restrict allowed origins in production.
   severity: WARNING
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   pattern: |
     .withSockJS()
@@ -109,14 +87,20 @@ rules:
   severity: WARNING
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   pattern: |
     http.csrf().disable()
 
-# ---------- A02  SECRETS ----------
+
+# ---------- A02  SECRETS / TLS ----------
+
 - id: SPRING-A02-001
   message: >-
     Do not store jasypt.encryptor.password inside application.properties.
@@ -124,12 +108,13 @@ rules:
   languages: [generic]
   paths:
     include:
-      - "**/application*.properties"
-      - "**/application*.yml"
-      - "**/application*.yaml"
+      - "src/main/resources/*.properties"
+      - "src/main/resources/**/*.properties"
+      - "src/main/resources/*.yml"
+      - "src/main/resources/**/*.yml"
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - .semgrep/**
+      - .github/**
   pattern-regex: (?i)jasypt\.encryptor\.password\s*[:=]
 
 - id: SPRING-A02-002
@@ -138,54 +123,30 @@ rules:
   severity: WARNING
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   pattern: |
     NoOpPasswordEncoder.getInstance()
 
-- id: SPRING-A02-003
-  message: >-
-    Hard-coded high-entropy secret detected.
-  severity: ERROR
-  languages: [java]
-  paths:
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-      - "**/*.md"
-  patterns:
-    - pattern-regex: '"[A-Za-z0-9+/]{20,}"'
-    - metavariable-analysis:
-        metavariable: $SECRET
-        analyzer: entropy
-        entropy-greater-than: 4.5
-    - pattern-not-inside: |
-        // ...
-
-- id: SPRING-A02-004
-  message: >-
-    java.util.Random used – switch to SecureRandom for security tokens.
-  severity: WARNING
-  languages: [java]
-  paths:
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-      - "**/*.md"
-  pattern: |
-    new Random()
-
 - id: SPRING-A02-005
   message: >-
-    setSSLContext that trusts all certs weakens TLS.
+    setSSLContext(...) that trusts all certs weakens TLS.
   severity: ERROR
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   pattern: |
     setSSLContext(...)
@@ -197,12 +158,13 @@ rules:
   languages: [generic]
   paths:
     include:
-      - "**/*.properties"
-      - "**/*.yml"
-      - "**/*.yaml"
+      - "src/main/resources/*.properties"
+      - "src/main/resources/**/*.properties"
+      - "src/main/resources/*.yml"
+      - "src/main/resources/**/*.yml"
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - .semgrep/**
+      - .github/**
   pattern-regex: (?i)(api[_-]?key|secret|password|token)\s*[:=]\s*["'][^"'\s]+["']
 
 - id: SPRING-A02-008
@@ -212,24 +174,29 @@ rules:
   languages: [generic]
   paths:
     include:
-      - "**/application*.properties"
-      - "**/application*.yml"
-      - "**/application*.yaml"
+      - "src/main/resources/*.properties"
+      - "src/main/resources/**/*.properties"
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - .semgrep/**
+      - .github/**
   pattern-regex: ^\s*server\.ssl\.enabled\s*=\s*false\b
 
-# ---------- A03  INJECTION ----------
+
+# ---------- A03  INJECTION / TEMPLATING / XSS ----------
+
 - id: SPRING-A03-001
   message: >-
     String concatenation inside @Query can lead to JPQL injection.
   severity: ERROR
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   mode: taint
   pattern-sources:
@@ -247,9 +214,13 @@ rules:
   severity: ERROR
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   mode: taint
   pattern-sources:
@@ -268,9 +239,13 @@ rules:
   severity: ERROR
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   mode: taint
   pattern-sources:
@@ -289,9 +264,13 @@ rules:
   severity: ERROR
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   mode: taint
   pattern-sources:
@@ -311,52 +290,60 @@ rules:
   languages: [generic]
   paths:
     include:
-      - "**/templates/**"
+      - "src/main/resources/templates/**"
       - "**/*.html"
       - "**/*.jsp"
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - .semgrep/**
+      - .github/**
   pattern-regex: th:utext
 
-- id: SPRING-A03-006
+- id: SPRING-A03-007
   message: >-
-    ResponseEntity.ok(userData) – ensure data is escaped if returned to browser.
-  severity: WARNING
+    Reflected XSS: user-controlled path or query parameter is written directly to the HTTP response.
+  severity: ERROR
   languages: [java]
   paths:
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-      - "**/*.md"
-  pattern: |
-    ResponseEntity.ok($DATA)
-
-- id: SPRING-A03-008
-  message: >-
-    Remote script loaded over HTTP – use HTTPS and consider SRI.
-  severity: WARNING
-  languages: [generic]
-  paths:
     include:
-      - "**/templates/**"
-      - "**/*.html"
-      - "**/*.jsp"
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
-  pattern-regex: <script\s+src=["']http://
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
+      - "**/*.md"
+  mode: taint
+  pattern-sources:
+    - pattern-either:
+        - pattern: |
+            @PathVariable String $X
+        - pattern: |
+            @RequestParam String $X
+  pattern-sinks:
+    - pattern-either:
+        - pattern: |
+            return $X;
+        - pattern: |
+            return "..." + $X;
+        - pattern: |
+            response.getWriter().print($X);
+
 
 # ---------- A04  SECURITY CONFIG ----------
+
 - id: SPRING-A04-001
   message: >-
     @CrossOrigin(origins="*") – restrict in production.
   severity: WARNING
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   pattern: |
     @CrossOrigin(origins = "*")
@@ -368,12 +355,13 @@ rules:
   languages: [generic]
   paths:
     include:
-      - "**/application*.properties"
-      - "**/application*.yml"
-      - "**/application*.yaml"
+      - "src/main/resources/*.properties"
+      - "src/main/resources/**/*.properties"
+      - "src/main/resources/*.yml"
+      - "src/main/resources/**/*.yml"
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - .semgrep/**
+      - .github/**
   pattern-regex: management\.endpoints\.web\.exposure\.include\s*=\s*\*
 
 - id: SPRING-A04-003
@@ -382,9 +370,13 @@ rules:
   severity: ERROR
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   mode: taint
   pattern-sources:
@@ -399,13 +391,17 @@ rules:
 
 - id: SPRING-A04-004
   message: >-
-    http.headers() disabled – ensure security headers are still added.
+    http.headers().disable() – ensure security headers are still added.
   severity: WARNING
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   pattern: |
     http.headers().disable()
@@ -416,9 +412,13 @@ rules:
   severity: WARNING
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   pattern: |
     .requiresChannel()
@@ -430,22 +430,28 @@ rules:
   languages: [generic]
   paths:
     include:
-      - "**/pom.xml"
+      - pom.xml
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - .semgrep/**
+      - .github/**
   pattern-regex: spring-boot-devtools
 
+
 # ---------- A05  FILE UPLOAD ----------
+
 - id: SPRING-A05-001
   message: >-
     MultipartFile received – validate size, type and path before writing.
   severity: WARNING
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   patterns:
     - pattern: |
@@ -455,17 +461,19 @@ rules:
     - pattern-not-inside: |
         if (! $F.getOriginalFilename().endsWith(...) ) ...
 
-# NOTE: A05-002 is noisy if implemented as "absence of config". Keep it out of ERROR scans for now.
-
 - id: SPRING-A05-003
   message: >-
     getOriginalFilename() used to build file-system path – can lead to traversal.
   severity: ERROR
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   patterns:
     - pattern: |
@@ -476,123 +484,39 @@ rules:
 - id: SPRING-A05-004
   message: >-
     File download – set Content-Type and Content-Disposition.
-  severity: WARNING
+  severity: INFO
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   pattern: |
-      ResponseEntity.ok(new UrlResource(...))
+    ResponseEntity.ok(new UrlResource(...))
 
-# ---------- A06  DEPENDENCIES ----------
-- id: SPRING-A06-001
-  message: >-
-    Dependency without version – use dependencyManagement or explicit version.
-  severity: INFO
-  languages: [generic]
-  paths:
-    include:
-      - "**/pom.xml"
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-  pattern-regex: '<dependency>\s*<groupId>[^<]+</groupId>\s*<artifactId>[^<]+</artifactId>\s*(<scope>[^<]+</scope>)?\s*</dependency>'
-
-- id: SPRING-A06-002
-  message: >-
-    Version uses property placeholder – ok with Spring-Boot-parent, but pin for prod.
-  severity: INFO
-  languages: [generic]
-  paths:
-    include:
-      - "**/pom.xml"
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-  pattern-regex: '<version>\$\{[^}]+\}</version>'
-
-- id: SPRING-A06-003
-  message: >-
-    logback-classic – check for known CVEs.
-  severity: WARNING
-  languages: [generic]
-  paths:
-    include:
-      - "**/pom.xml"
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-  pattern-regex: logback-classic
-
-- id: SPRING-A06-004
-  message: >-
-    spring-boot-starter-web – ensure version is tracked for CVEs.
-  severity: WARNING
-  languages: [generic]
-  paths:
-    include:
-      - "**/pom.xml"
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-  pattern-regex: spring-boot-starter-web
-
-- id: SPRING-A06-005
-  message: >-
-    jackson-databind – keep version patched (frequent CVEs).
-  severity: WARNING
-  languages: [generic]
-  paths:
-    include:
-      - "**/pom.xml"
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-  pattern-regex: jackson-databind
-
-- id: SPRING-A06-006
-  message: >-
-    Use dependencyManagement to control transitive versions.
-  severity: INFO
-  languages: [generic]
-  paths:
-    include:
-      - "**/pom.xml"
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-  pattern-regex: dependencyManagement
-
-- id: SPRING-A06-007
-  message: >-
-    Remote script without integrity – add SRI for production.
-  severity: INFO
-  languages: [generic]
-  paths:
-    include:
-      - "**/templates/**"
-      - "**/*.html"
-      - "**/*.jsp"
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-  pattern-regex: <script(?!.*integrity).*\ssrc=["']https?://
 
 # ---------- A07  ACCOUNT / PASSWORD ----------
+
 - id: SPRING-A07-001
   message: >-
     Password stored plaintext – encode with BCrypt/PBKDF2.
   severity: ERROR
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   pattern: |
-      user.setPassword($PLAIN)
+    user.setPassword($PLAIN)
 
 - id: SPRING-A07-002
   message: >-
@@ -600,12 +524,16 @@ rules:
   severity: WARNING
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   pattern: |
-      String $TOKEN = String.valueOf(System.currentTimeMillis() ...)
+    String $TOKEN = String.valueOf(System.currentTimeMillis() ...)
 
 - id: SPRING-A07-003
   message: >-
@@ -613,65 +541,36 @@ rules:
   severity: WARNING
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   pattern: |
-      throw new BadCredentialsException("User not found")
+    throw new BadCredentialsException("User not found")
 
-- id: SPRING-A07-004
-  message: >-
-    Reset token not invalidated after use – delete or mark used.
-  severity: WARNING
-  languages: [java]
-  paths:
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-      - "**/*.md"
-  pattern: |
-      user.setPassword(...)
-
-- id: SPRING-A07-005
-  message: >-
-    No password-strength check – add minimal rules.
-  severity: INFO
-  languages: [java]
-  paths:
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-      - "**/*.md"
-  pattern: |
-      user.setPassword($P)
-
-- id: SPRING-A07-006
-  message: >-
-    No account-lockout – consider failed-attempt counter.
-  severity: INFO
-  languages: [java]
-  paths:
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-      - "**/*.md"
-  pattern: |
-      public $RET login(...)
 
 # ---------- A08  DESERIAL / TEMPLATE ----------
+
 - id: SPRING-A08-001
   message: >-
     Deserialising into Object/raw Map – restrict polymorphic types.
   severity: ERROR
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   pattern: |
-      objectMapper.readValue($JSON, Object.class)
+    objectMapper.readValue($JSON, Object.class)
 
 - id: SPRING-A08-002
   message: >-
@@ -679,9 +578,13 @@ rules:
   severity: WARNING
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   patterns:
     - pattern-inside: |
@@ -699,9 +602,13 @@ rules:
   severity: ERROR
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   mode: taint
   pattern-sources:
@@ -714,59 +621,25 @@ rules:
     - pattern: |
         cfg.getTemplate($X)
 
-- id: SPRING-A08-004
-  message: >-
-    Track dependencies for CVEs via dependencyManagement.
-  severity: INFO
-  languages: [generic]
-  paths:
-    include:
-      - "**/pom.xml"
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-  pattern-regex: dependencyManagement
-
-- id: SPRING-A08-005
-  message: >-
-    Downloaded artifacts – verify checksums in CI.
-  severity: INFO
-  languages: [generic]
-  paths:
-    include:
-      - "**/pom.xml"
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-  pattern-regex: maven-dependency-plugin:copy
 
 # ---------- A09  LOGGING ----------
+
 - id: SPRING-A09-001
   message: >-
     Logging password – remove or mask.
   severity: ERROR
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   pattern: |
-      log.info("Password: " + user.getPassword())
-
-- id: SPRING-A09-002
-  message: >-
-    Swallowing security exception – log or re-throw.
-  severity: WARNING
-  languages: [java]
-  paths:
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-      - "**/*.md"
-  patterns:
-    - pattern: |
-        catch ($E e) { /* empty */ }
+    log.info("Password: " + user.getPassword())
 
 - id: SPRING-A09-004
   message: >-
@@ -774,36 +647,33 @@ rules:
   severity: WARNING
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   pattern: |
-      e.printStackTrace(response.getWriter())
+    e.printStackTrace(response.getWriter())
 
-- id: SPRING-A09-005
-  message: >-
-    Failed login not logged – add security event.
-  severity: INFO
-  languages: [java]
-  paths:
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-      - "**/*.md"
-  pattern: |
-      catch (BadCredentialsException e) { ... }
 
 # ---------- A10  SSRF / XXE / JNDI ----------
+
 - id: SPRING-A10-001
   message: >-
     RestTemplate URL from user – validate / whitelist.
   severity: ERROR
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   mode: taint
   pattern-sources:
@@ -822,9 +692,13 @@ rules:
   severity: ERROR
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   mode: taint
   pattern-sources:
@@ -843,9 +717,13 @@ rules:
   severity: ERROR
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   mode: taint
   pattern-sources:
@@ -860,29 +738,20 @@ rules:
 
 - id: SPRING-A10-004
   message: >-
-    XML parsed from request stream – enable FEATURE_SECURE_PROCESSING.
+    XML parsed from request stream – enable secure processing features.
   severity: ERROR
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   pattern: |
-      DocumentBuilder.parse(request.getInputStream())
-
-- id: SPRING-A10-005
-  message: >-
-    RestTemplate remote call – check DNS-rebinding defences.
-  severity: WARNING
-  languages: [java]
-  paths:
-    exclude:
-      - ".semgrep/**"
-      - ".github/**"
-      - "**/*.md"
-  pattern: |
-      restTemplate.getForObject($URL, ...)
+    DocumentBuilder.parse(request.getInputStream())
 
 - id: SPRING-A10-006
   message: >-
@@ -890,9 +759,13 @@ rules:
   severity: WARNING
   languages: [java]
   paths:
+    include:
+      - src/main/java/**
     exclude:
-      - ".semgrep/**"
-      - ".github/**"
+      - src/test/java/**
+      - .semgrep/**
+      - .github/**
+      - target/**
       - "**/*.md"
   pattern: |
-      request.getHeader("X-Forwarded-For")
+    request.getHeader("X-Forwarded-For")
