@@ -29,7 +29,7 @@ jobs:
       - name: Run custom Spring rules
         run: |
           echo "🔍 Scanning custom Spring rule-set..."
-          # JSON for machine-readable summary (WARNING+ERROR)
+          # JSON for machine-readable summary (WARNING + ERROR)
           semgrep \
             --config .semgrep/spring-custom.yml \
             --severity WARNING \
@@ -38,7 +38,7 @@ jobs:
             --no-git-ignore \
             --json > custom.json || true
 
-          # Text for human-readable log
+          # Text for raw log if you want to inspect Semgrep output
           semgrep \
             --config .semgrep/spring-custom.yml \
             --severity WARNING \
@@ -60,7 +60,7 @@ jobs:
             --no-git-ignore \
             --json > positive.json || true
 
-          # Text for human-readable log
+          # Text for raw log
           semgrep \
             --config .semgrep/spring-positive.yml \
             --disable-version-check \
@@ -68,12 +68,14 @@ jobs:
             --text > positive.txt || true
 
       # --------------------------------------------------
-      # 3) Summarize and decide pass/fail
+      # 3) Generate CodeQL/Sonar-style summary and enforce gate
       # --------------------------------------------------
       - name: Generate security summary and fail if needed
         run: |
           python - << 'PY'
-          import json, pathlib, sys
+          import json, pathlib, sys, textwrap
+
+          # ---------- helpers ----------
 
           def load(path):
               p = pathlib.Path(path)
@@ -84,25 +86,97 @@ jobs:
               except Exception:
                   return {}
 
-          custom = load("custom.json")
-          positive = load("positive.json")
-
           def count_by_rule(data):
               counts = {}
               for res in data.get("results", []):
                   rid = res.get("check_id") or res.get("extra", {}).get("rule", {}).get("id")
                   if not rid:
                       continue
-                  # strip "semgrep." prefix if present
                   if rid.startswith("semgrep."):
                       rid = rid[len("semgrep."):]
                   counts[rid] = counts.get(rid, 0) + 1
               return counts
 
+          def read_snippet(path, start_line, end_line, context=2):
+              """
+              Return a list of (is_hit_line, lineno, text) around the finding.
+              """
+              try:
+                  with open(path, "r", encoding="utf-8", errors="replace") as f:
+                      lines = f.read().splitlines()
+              except OSError:
+                  return []
+
+              if start_line is None:
+                  return []
+
+              s = max(start_line - 1 - context, 0)
+              e = min((end_line or start_line) - 1 + context, len(lines) - 1)
+              out = []
+              for idx in range(s, e + 1):
+                  lineno = idx + 1
+                  is_hit = (start_line <= lineno <= (end_line or start_line))
+                  out.append((is_hit, lineno, lines[idx]))
+              return out
+
+          def print_snippet(snippet):
+              if not snippet:
+                  print("  (no snippet available)")
+                  return
+              for is_hit, lineno, text in snippet:
+                  prefix = ">>" if is_hit else "  "
+                  print(f"  {prefix} {lineno:4d} | {text}")
+
+          # ---------- load JSON outputs ----------
+
+          custom   = load("custom.json")
+          positive = load("positive.json")
+
+          custom_results   = custom.get("results", [])
+          positive_results = positive.get("results", [])
+
           custom_counts   = count_by_rule(custom)
           positive_counts = count_by_rule(positive)
 
-          # Blocking custom rules (real vulnerabilities)
+          # ---------- rule metadata (explanations, categories) ----------
+
+          RULE_EXPLANATIONS = {
+              "SPRING-A01-003": "User-controlled path is used to build a ClassPathResource. An attacker can traverse paths to load unintended files.",
+              "SPRING-A02-001": "Jasypt encryption password is stored directly in config. If the file leaks, attackers can decrypt all encrypted data.",
+              "SPRING-A02-005": "Custom SSL context may trust all certificates, breaking TLS guarantees and enabling MITM attacks.",
+              "SPRING-A02-006": "Likely hard-coded secret/API key in config. Secrets should be stored in secret stores or env variables, not in the repo.",
+              "SPRING-A03-001": "Dynamic JPQL built from user input can lead to injection: an attacker crafts input to modify the query logic.",
+              "SPRING-A03-002": "ProcessBuilder runs OS commands. If arguments contain user input, it can result in command injection.",
+              "SPRING-A03-003": "LDAP search filter includes unsanitized user input, allowing LDAP injection to bypass checks or exfiltrate data.",
+              "SPRING-A03-004": "SpEL expressions parsed from user input can execute arbitrary code or access internal beans.",
+              "SPRING-A03-007": "User-controlled @PathVariable/@RequestParam is reflected in the HTTP response without encoding, creating reflected XSS.",
+              "SPRING-A05-003": "File path is built from getOriginalFilename() without normalization, enabling path traversal to overwrite arbitrary files.",
+              "SPRING-A07-001": "Passwords are stored or assigned in plaintext without hashing. If storage leaks, all accounts are compromised.",
+              "SPRING-A08-001": "Deserializing into Object/raw types can allow gadget-based deserialization attacks if untrusted JSON is accepted.",
+              "SPRING-A08-003": "Template name derived from user input lets an attacker pick any template to render, leaking data or running unexpected views.",
+              "SPRING-A09-001": "Logging passwords exposes credentials in logs, which are often broadly accessible.",
+              "SPRING-A10-001": "RestTemplate target URL is user-controlled, allowing SSRF to internal services.",
+              "SPRING-A10-002": "ResourceLoader with file: + user data can read arbitrary files from the file system.",
+              "SPRING-A10-003": "JNDI lookups based on user input can trigger remote class loading (JNDI injection).",
+              "SPRING-A10-004": "XML parsing of request body without secure features can be vulnerable to XXE and billion-laughs attacks.",
+          }
+
+          RULE_OWASP = {
+              "SPRING-A03-007": "OWASP A03:2021 Injection (XSS)",
+              "SPRING-A03-001": "OWASP A03:2021 Injection",
+              "SPRING-A03-002": "OWASP A03:2021 Injection",
+              "SPRING-A03-003": "OWASP A03:2021 Injection",
+              "SPRING-A03-004": "OWASP A03:2021 Injection",
+              "SPRING-A05-003": "OWASP A05:2021 Security Misconfiguration / A01:2021 Broken Access Control",
+              "SPRING-A01-003": "OWASP A01:2021 Broken Access Control",
+              "SPRING-A07-001": "OWASP A07:2021 Identification and Authentication Failures",
+              "SPRING-A10-001": "OWASP A10:2021 Server-Side Request Forgery",
+              "SPRING-A10-002": "OWASP A01:2021 Broken Access Control / A05:2021 Security Misconfiguration",
+              "SPRING-A10-003": "OWASP A08:2021 Software and Data Integrity Failures",
+              "SPRING-A10-004": "OWASP A05:2021 Security Misconfiguration / A04:2021 Insecure Design",
+          }
+
+          # Blocking rules: any of these firing fails the build
           BLOCKING_RULES = {
               "SPRING-A01-003",
               "SPRING-A02-001",
@@ -124,9 +198,7 @@ jobs:
               "SPRING-A10-004",
           }
 
-          blocking_custom = {r: n for r, n in custom_counts.items() if r in BLOCKING_RULES}
-
-          # Expected positive (secure-by-default) rules
+          # 7 best-practice rules that MUST be present
           EXPECTED_POSITIVE = [
               "POS-admin-authz",
               "POS-request-mapping-method",
@@ -137,45 +209,103 @@ jobs:
               "POS-idor-ownership",
           ]
 
+          blocking_custom = set()
+          for rid in custom_counts:
+              if rid in BLOCKING_RULES and custom_counts[rid] > 0:
+                  blocking_custom.add(rid)
+
           missing_positive = [r for r in EXPECTED_POSITIVE if positive_counts.get(r, 0) == 0]
 
+          # ---------- pretty header ----------
           print("┌──────────────────────────────┐")
           print("│ Spring Tutorial Security CI │")
           print("└──────────────────────────────┘\n")
 
-          def table(title, counts):
-              if not counts:
-                  print(f"{title}: none\n")
-                  return
-              print(title + ":")
-              print("  Rule ID              Findings")
-              print("  ------------------------------")
-              for rule, n in sorted(counts.items()):
-                  print(f"  {rule:<24} {n}")
-              print()
+          # ---------- detailed vulnerability-style summary (custom pack) ----------
 
-          table("Custom vulnerability rules (.semgrep/spring-custom.yml)", custom_counts)
-          table("Beginner safety rules (.semgrep/spring-positive.yml)", positive_counts)
+          if not custom_results:
+              print("No Semgrep custom vulnerabilities found.\n")
+          else:
+              print("Custom vulnerability findings (Semgrep):\n")
+
+              # Sort: ERROR first, then WARNING, then by rule id
+              SEV_ORDER = {"ERROR": 0, "WARNING": 1, "INFO": 2}
+              def sort_key(res):
+                  extra = res.get("extra", {})
+                  rid = res.get("check_id") or extra.get("rule", {}).get("id") or ""
+                  if rid.startswith("semgrep."):
+                      rid = rid[len("semgrep."):]
+                  sev = extra.get("severity", "WARNING").upper()
+                  return (SEV_ORDER.get(sev, 1), rid, res.get("path", ""))
+
+              for res in sorted(custom_results, key=sort_key):
+                  extra = res.get("extra", {})
+                  rid = res.get("check_id") or extra.get("rule", {}).get("id") or ""
+                  if rid.startswith("semgrep."):
+                      rid = rid[len("semgrep."):]
+                  msg  = extra.get("message", "").strip()
+                  sev  = extra.get("severity", "WARNING").upper()
+                  path = res.get("path", "?")
+                  start = res.get("start", {}) or res.get("start", {})
+                  line  = start.get("line")
+                  end   = res.get("end", {}) or res.get("end", {})
+                  end_line = end.get("line", line)
+
+                  explanation = RULE_EXPLANATIONS.get(rid, msg or "See rule documentation for details.")
+                  owasp = RULE_OWASP.get(rid)
+
+                  print("────────────────────────────────────────────────────────────")
+                  print(f"[{rid}] {msg}")
+                  print(f"Severity : {sev}")
+                  print(f"Location : {path}:{line if line is not None else '?'}")
+                  if owasp:
+                      print(f"OWASP    : {owasp}")
+                  print("Code:")
+                  snippet = read_snippet(path, line, end_line)
+                  print_snippet(snippet)
+                  print("Explanation:")
+                  for para in textwrap.wrap(explanation, width=78):
+                      print(f"  {para}")
+                  print()
+
+          # ---------- positive findings summary (best practices) ----------
+
+          print("\nBest-practice patterns (positive rules):\n")
+          if not positive_counts:
+              print("  None of the positive rules matched.\n")
+          else:
+              print("  Rule ID                    Matches")
+              print("  ---------------------------------")
+              for rid in sorted(positive_counts):
+                  print(f"  {rid:<26} {positive_counts[rid]}")
+              print()
 
           print("Summary:")
           print(f"  • Total custom findings           : {sum(custom_counts.values())}")
           print(f"  • Total positive findings         : {sum(positive_counts.values())}")
           print(f"  • Blocking custom rules triggered : {len(blocking_custom)}")
-          print(f"  • Missing beginner-safety rules   : {len(missing_positive)}")
+          print(f"  • Positive rules present          : {len([r for r in EXPECTED_POSITIVE if positive_counts.get(r, 0) > 0])} / {len(EXPECTED_POSITIVE)}")
 
           if missing_positive:
-              print("\nMissing beginner-safety coverage for these rules:")
+              print("\nMissing required best-practice rules (must all be present):")
               for r in missing_positive:
                   print(f"  - {r}")
 
-          # CI policy:
-          #  - FAIL if any blocking custom rules fired
-          #  - OR if ALL positive rules are missing (0/7 matched)
-          should_fail = bool(blocking_custom) or len(missing_positive) == len(EXPECTED_POSITIVE)
+          # ---------- gate logic ----------
+          # PASS only if:
+          #   - no blocking custom rules fired
+          #   - AND all 7 best-practice rules are present
+          should_fail = bool(blocking_custom) or bool(missing_positive)
 
           if should_fail:
-              print("\n❌ Tutorial is NOT secure by default (blocking issues and/or no beginner safety shown).")
+              print("\n❌ Tutorial FAILED security gate.")
+              if blocking_custom:
+                  print("   Reason: Blocking vulnerabilities detected:")
+                  for r in sorted(blocking_custom):
+                      print(f"     - {r} ({custom_counts.get(r, 0)} findings)")
+              if missing_positive:
+                  print("   Reason: Not all best-practice rules are shown in the tutorial.")
               sys.exit(1)
           else:
-              print("\n✅ Tutorial passes security gate (no blocking issues, and at least one beginner-safety rule present).")
+              print("\n✅ Tutorial PASSED security gate (no blocking vulns, all best practices demonstrated).")
           PY
