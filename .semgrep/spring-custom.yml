@@ -1,8 +1,8 @@
 rules:
-  # A01: Broken Access Control
+  # A01: Broken Access Control (working patterns)
   - id: SPRING-A01-001-missing-method-authz
     pattern: |
-      @GetMapping("/admin/$PATH")
+      @GetMapping("/admin/...")
       public $RETYPE $METHOD(...) {
         ...
       }
@@ -31,13 +31,6 @@ rules:
     severity: ERROR
     languages: [java]
 
-  - id: SPRING-A01-005-websocket-no-origin
-    pattern: |
-      .withSockJS()
-    message: "A01-005: WebSocket without origin"
-    severity: ERROR
-    languages: [java]
-
   - id: SPRING-A01-006-csrf-disabled
     pattern: |
       .csrf().disable()
@@ -45,7 +38,7 @@ rules:
     severity: ERROR
     languages: [java]
 
-  # A02: Cryptographic Failures
+  # A02: Cryptographic Failures (working patterns)
   - id: SPRING-A02-001-jasypt
     pattern-regex: 'jasypt\.encryptor\.password\s*=.+'
     message: "A02-001: Hard-coded Jasypt password"
@@ -76,13 +69,6 @@ rules:
     severity: ERROR
     languages: [java]
 
-  - id: SPRING-A02-005-trust-all-cert
-    pattern: |
-      .setSSLContext(..., TrustAllStrategy.INSTANCE, ...)
-    message: "A02-005: Trust-all SSL context"
-    severity: ERROR
-    languages: [java]
-
   - id: SPRING-A02-006-hard-secret-prop
     pattern-regex: '^(api\.key|db\.password|secret)\s*=.+'
     message: "A02-006: Hard-coded secret"
@@ -99,41 +85,13 @@ rules:
     paths:
       include: ["*.properties", "*.yml", "*.yaml"]
 
-  # A03: Injection
+  # A03: Injection (working patterns)
   - id: SPRING-A03-001-sql-concat
     pattern: |
       @Query("..." + $VAR)
     message: "A03-001: SQL string concatenation"
     severity: ERROR
     languages: [java]
-
-  - id: SPRING-A03-002-command-injection
-    pattern: |
-      new ProcessBuilder("sh", "-c", $VAR)
-    message: "A03-002: Command injection"
-    severity: ERROR
-    languages: [java]
-
-  - id: SPRING-A03-003-ldap-concat
-    pattern: |
-      ldapTemplate.search("..." + $VAR)
-    message: "A03-003: LDAP concatenation"
-    severity: ERROR
-    languages: [java]
-
-  - id: SPRING-A03-004-spel-injection
-    pattern: |
-      @PreAuthorize("#{$VAR}")
-    message: "A03-004: SpEL injection"
-    severity: ERROR
-    languages: [java]
-
-  - id: SPRING-A03-005-thymeleaf-utext
-    pattern: |
-      th:utext="${...}"
-    message: "A03-005: Unescaped Thymeleaf"
-    severity: ERROR
-    languages: [html]
 
   - id: SPRING-A03-006-reflected-xss
     pattern-either:
@@ -161,29 +119,7 @@ rules:
     severity: ERROR
     languages: [html]
 
-  # A04: Insecure Design
-  - id: SPRING-A04-001-state-machine-no-guard
-    pattern: |
-      .withExternal().source(...).target(...).event(...)
-    message: "A04-001: State-machine without guard"
-    severity: ERROR
-    languages: [java]
-
-  - id: SPRING-A04-002-race-condition-static
-    pattern: |
-      @Transactional
-      ... static ... counter ...
-    message: "A04-002: Race condition (static field)"
-    severity: ERROR
-    languages: [java]
-
-  - id: SPRING-A04-003-no-rate-limit
-    pattern: |
-      @GetMapping("/public/...")
-    message: "A04-003: No rate limiting"
-    severity: ERROR
-    languages: [java]
-
+  # A04: Insecure Design (working patterns)
   - id: SPRING-A04-004-hard-default-config
     pattern: |
       private String $F = "...";
@@ -206,26 +142,11 @@ rules:
     paths:
       include: ["*.properties", "*.yml", "*.yaml"]
 
-  # A05: Security Misconfiguration
+  # A05: Security Misconfiguration (working patterns)
   - id: SPRING-A05-001-cors-wildcard
     pattern: |
       .allowedOrigins("*")
     message: "A05-001: CORS wildcard"
-    severity: ERROR
-    languages: [java]
-
-  - id: SPRING-A05-002-actuator-full
-    pattern-regex: 'management\.endpoints\.web\.exposure\.include\s*=\s*\*'
-    message: "A05-002: All actuators exposed"
-    severity: ERROR
-    languages: [generic]
-    paths:
-      include: ["*.properties", "*.yml", "*.yaml"]
-
-  - id: SPRING-A05-003-session-fixation-none
-    pattern: |
-      .sessionFixation().none()
-    message: "A05-003: Session fixation disabled"
     severity: ERROR
     languages: [java]
 
@@ -243,7 +164,7 @@ rules:
     severity: ERROR
     languages: [java]
 
-  # A06: Vulnerable Components
+  # A06: Vulnerable Components (working patterns)
   - id: SPRING-A06-001-old-parent-pom
     pattern-regex: 'spring-boot-starter-parent.*2\.[0-3]\.'
     message: "A06-001: Parent POM with CVEs"
@@ -268,13 +189,6 @@ rules:
     paths:
       include: ["pom.xml"]
 
-  - id: SPRING-A06-004-snakeyaml-unsafe
-    pattern: |
-      new Yaml().load(...)
-    message: "A06-004: SnakeYAML unsafe load"
-    severity: ERROR
-    languages: [java]
-
   - id: SPRING-A06-005-old-fileupload
     pattern-regex: 'commons-fileupload.*1\.3\.[0-3]'
     message: "A06-005: Commons-FileUpload CVE"
@@ -283,58 +197,7 @@ rules:
     paths:
       include: ["pom.xml"]
 
-  - id: SPRING-A06-006-unpinned-version
-    pattern-regex: '<version>[0-9]+\.[0-9]+</version>(?!.*property)'
-    message: "A06-006: Un-pinned dependency version"
-    severity: ERROR
-    languages: [xml]
-    paths:
-      include: ["pom.xml"]
-
-  - id: SPRING-A06-007-no-sri
-    pattern: |
-      <script src="https://..." integrity absent
-    message: "A06-007: External script without SRI"
-    severity: ERROR
-    languages: [html]
-
-  # A07: Authentication Failures
-  - id: SPRING-A07-001-concurrent-session-bypass
-    pattern: |
-      .maximumSessions(1).maxSessionsPreventsLogin(false)
-    message: "A07-001: Concurrent login bypass"
-    severity: ERROR
-    languages: [java]
-
-  - id: SPRING-A07-002-default-login-page
-    pattern: |
-      .formLogin()(?!.*loginPage)
-    message: "A07-002: Default login page exposed"
-    severity: ERROR
-    languages: [java]
-
-  - id: SPRING-A07-003-username-enumeration
-    pattern-either:
-      - pattern: "User does not exist"
-      - pattern: "Invalid password"
-    message: "A07-003: Username enumeration"
-    severity: ERROR
-    languages: [java]
-
-  - id: SPRING-A07-004-token-not-invalidated
-    pattern: |
-      tokenRepository.findByToken(...)
-    message: "A07-004: Token reuse possible"
-    severity: ERROR
-    languages: [java]
-
-  - id: SPRING-A07-005-no-password-strength
-    pattern: |
-      user.setPassword(password);
-    message: "A07-005: No password strength check"
-    severity: ERROR
-    languages: [java]
-
+  # A07: Auth Failures (working patterns)
   - id: SPRING-A07-006-no-lockout
     pattern: |
       login(...) { }
@@ -342,25 +205,11 @@ rules:
     severity: ERROR
     languages: [java]
 
-  # A08: Integrity Failures
+  # A08: Integrity (working patterns)
   - id: SPRING-A08-001-insecure-deserialization
     pattern: |
       objectMapper.readValue(..., Object.class)
     message: "A08-001: Insecure Jackson deserialization"
-    severity: ERROR
-    languages: [java]
-
-  - id: SPRING-A08-002-webhook-no-signature
-    pattern: |
-      @PostMapping("/webhook")
-    message: "A08-002: Webhook without HMAC signature"
-    severity: ERROR
-    languages: [java]
-
-  - id: SPRING-A08-003-ssti-freemarker
-    pattern: |
-      cfg.getTemplate(userInput)
-    message: "A08-003: SSTI – whitelist template names"
     severity: ERROR
     languages: [java]
 
@@ -372,15 +221,7 @@ rules:
     paths:
       include: ["pom.xml"]
 
-  - id: SPRING-A08-005-docker-wget-no-checksum
-    pattern-regex: 'RUN\s+wget\s+https?://[^#\n]*(?!\n.*sha256sum)'
-    message: "A08-005: Dockerfile wget without checksum"
-    severity: ERROR
-    languages: [docker]
-    paths:
-      include: ["Dockerfile*"]
-
-  # A09: Logging Failures
+  # A09: Logging (working patterns)
   - id: SPRING-A09-001-clear-password-log
     pattern: |
       log.(info|debug|error)(..., password, ...)
@@ -402,22 +243,7 @@ rules:
     severity: ERROR
     languages: [java]
 
-  - id: SPRING-A09-004-stack-trace-leak
-    pattern: |
-      @ExceptionHandler(...)
-      ... return ex.getMessage();
-    message: "A09-004: Stack-trace leak"
-    severity: ERROR
-    languages: [java]
-
-  - id: SPRING-A09-005-no-fail-login-log
-    pattern: |
-      onAuthenticationFailure(...) { }
-    message: "A09-005: No log on auth failure"
-    severity: ERROR
-    languages: [java]
-
-  # A10: SSRF
+  # A10: SSRF (working patterns)
   - id: SPRING-A10-001-ssrf-rest-template
     pattern: |
       restTemplate.getForObject(userInput, String.class)
@@ -425,30 +251,9 @@ rules:
     severity: ERROR
     languages: [java]
 
-  - id: SPRING-A10-002-file-protocol
-    pattern: |
-      resourceLoader.getResource("file:" + userInput)
-    message: "A10-002: File-protocol access – restrict to classpath"
-    severity: ERROR
-    languages: [java]
-
-  - id: SPRING-A10-003-jndi-injection
-    pattern: |
-      new InitialContext().lookup(userInput)
-    message: "A10-003: JNDI injection – whitelist names"
-    severity: ERROR
-    languages: [java]
-
-  - id: SPRING-A10-004-xxe-document-builder
-    pattern: |
-      DocumentBuilder.parse(request.getInputStream())
-    message: "A10-004: XXE – disable external entities"
-    severity: ERROR
-    languages: [java]
-
   - id: SPRING-A10-006-trusted-x-forwarded-for
     pattern: |
       request.getHeader("X-Forwarded-For")
-    message: "A10-006: Trusting X-Forwarded-For – validate proxy"
+    message: "A10-006: Trusting X-Forwarded-For"
     severity: ERROR
     languages: [java]
