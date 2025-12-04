@@ -299,34 +299,36 @@ rules:
   pattern-regex: th:utext
 
 - id: SPRING-A03-007
+  - id: SPRING-A03-007
   message: >-
-    Reflected XSS: user-controlled path or query parameter is written directly to the HTTP response.
+    Possible reflected XSS: user-controlled data is written directly to the HTTP response
+    or returned from a controller without encoding.
   severity: ERROR
   languages: [java]
-  paths:
-    include:
-      - src/main/java/**
-    exclude:
-      - src/test/java/**
-      - .semgrep/**
-      - .github/**
-      - target/**
-      - "**/*.md"
   mode: taint
+
   pattern-sources:
     - pattern-either:
-        - pattern: |
-            @PathVariable String $X
-        - pattern: |
-            @RequestParam String $X
+      - pattern: |
+          @PathVariable $T $X
+      - pattern: |
+          @RequestParam $T $X
+      - pattern: |
+          $REQ.getParameter($P)
+
   pattern-sinks:
     - pattern-either:
-        - pattern: |
-            return $X;
-        - pattern: |
-            return "..." + $X;
-        - pattern: |
-            response.getWriter().print($X);
+      - pattern: |
+          $RESP.getWriter().print($X)
+      - pattern: |
+          $RESP.getWriter().println($X)
+      - pattern: |
+          $RESP.getWriter().write($X)
+      - pattern: |
+          return $X
+      - pattern: |
+          return $PFX + $X + $SFX
+
 
 
 # ---------- A04  SECURITY CONFIG ----------
