@@ -1,23 +1,12 @@
 rules:
 - id: SPRING-A01-001
-  message: 'Missing Method-Level Security on REST Endpoints (SPRING-A01-001).
-
-
-    CodeQL: Taint from request to service layer without `@PreAuthorize` check
-
-    SonarCloud: AST pattern - `@RequestMapping` without `@Security` / `@PreAuthorize`
-    method-level annotations | Pattern: `@GetMapping("/admin/users") public List<User>
-    getAllUsers() { return userService.findAll(); }`
-
-
-    Notes:
-
-    CodeQL: No Spring Security rule (gap)
-
-    SonarCloud: No method-level rule (gap)'
+  message: |
+    Rule: Missing Method-Level Security on REST Endpoints (SPRING-A01-001)
+    Detail: REST admin endpoints should use method-level authorization, e.g. @PreAuthorize / @Secured.
+    Pattern matched: Controller methods using @GetMapping (often on admin endpoints)
+    Actual pattern: pattern-regex 'GetMapping'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: GetMapping
   paths:
     include:
@@ -25,1183 +14,679 @@ rules:
     - '*.kt'
     - '*.properties'
     - '*.yml'
+
 - id: SPRING-A01-002
-  message: '@Controller Without @RequestMapping Method Restrictions (SPRING-A01-002).
-
-
-    CodeQL: Taint from `@RequestMapping` to all methods when `method` attribute is
-    missing or includes multiple HTTP verbs
-
-    SonarCloud: Pattern - `@RequestMapping("/api") public String handle() { ... } //
-    Accepts GET, POST, DELETE, etc.`
-
-
-    Notes:
-
-    SonarCloud: [`java:S3752`](https://rules.sonarsource.com/java/RSPEC-3752/) (covers
-    broad mapping but not tutorial-specific context)'
+  message: |
+    Rule: @Controller Without @RequestMapping Method Restrictions (SPRING-A01-002)
+    Detail: @RequestMapping should usually specify HTTP method(s) instead of accepting all verbs by default.
+    Pattern matched: Use of @RequestMapping
+    Actual pattern: pattern-regex 'RequestMapping'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: RequestMapping
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A01-003
-  message: 'Path Traversal in Resource Resolution (SPRING-A01-003).
-
-
-    CodeQL: Taint from `@PathVariable` to `ResourceResolver`
-
-    SonarCloud: Pattern - `@GetMapping("/file/{filename}") public Resource
-    getFile(@PathVariable String filename) { return new
-    ClassPathResource("static/" + filename); }`
-
-
-    Notes:
-
-    CodeQL: [`java/path-injection`](https://codeql.github.com/codeql-query-help/java/java-path-injection/)
-    (covers this)
-
-    SonarCloud: No path traversal rule (gap)'
+  message: |
+    Rule: Path Traversal in Resource Resolution (SPRING-A01-003)
+    Detail: Avoid building resource paths from user input with ClassPathResource or similar APIs.
+    Pattern matched: Use of ClassPathResource
+    Actual pattern: pattern-regex 'ClassPathResource'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: ClassPathResource
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A01-004
-  message: 'Insecure Direct Object Reference (IDOR) in Repository Access
-    (SPRING-A01-004).
-
-
-    CodeQL: Taint from `@PathVariable` to `repository.findById()` without ownership
-    check
-
-    SonarCloud: Pattern - `@GetMapping("/user/{id}") User getUser(@PathVariable Long
-    id) { return userRepository.findById(id).get(); } // No check if current user owns
-    this ID`
-
-
-    Notes:
-
-    CodeQL: No IDOR rule (gap)
-
-    SonarCloud: No ownership check rule (gap)'
+  message: |
+    Rule: Insecure Direct Object Reference (IDOR) in Repository Access (SPRING-A01-004)
+    Detail: Access by repository.findById should check ownership or authorization for the loaded ID.
+    Pattern matched: repository.findById(...)
+    Actual pattern: pattern-regex 'repository\.findById'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: repository\.findById
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A01-005
-  message: 'WebSocket Without Origin Check (SPRING-A01-005).
-
-
-    CodeQL: Taint from `WebSocketHandler` to `handleMessage` without origin
-    validation
-
-    SonarCloud: Pattern - `registry.addHandler(myHandler(), "/ws").withSockJS(); //
-    No setAllowedOrigins("*") or restricted origin`
-
-
-    Notes:
-
-    CodeQL: No WebSocket rule (gap)
-
-    SonarCloud: No origin check rule (gap)'
+  message: |
+    Rule: WebSocket Without Origin Check (SPRING-A01-005)
+    Detail: WebSocket handlers should restrict allowed origins instead of accepting all.
+    Pattern matched: withSockJS() registration (often used in WebSocket configs)
+    Actual pattern: pattern-regex 'withSockJS'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: withSockJS
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A01-006
-  message: 'CSRF Protection Disabled Globally (SPRING-A01-006).
-
-
-    CodeQL: Control flow shows `http.csrf().disable()` in SecurityConfig without
-    justification
-
-    SonarCloud: Pattern - `http.csrf().disable(); // Applied to web app, not just
-    stateless API`
-
-
-    Notes:
-
-    CodeQL: [`java/spring-disabled-csrf`](https://codeql.github.com/codeql-query-help/java/java-spring-disabled-csrf/)
-    (covers this)
-
-    SonarCloud: [`java:S4502`](https://rules.sonarsource.com/java/RSPEC-4502/)
-    (overlaps)'
+  message: |
+    Rule: CSRF Protection Disabled Globally (SPRING-A01-006)
+    Detail: http.csrf().disable() should not be used lightly in beginner tutorials; explain the trade-offs.
+    Pattern matched: http.csrf().disable(...)
+    Actual pattern: pattern-regex 'http\.csrf'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: http\.csrf
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A02-001
-  message: 'Jasypt Encrypted Password in Properties File (SPRING-A02-001).
-
-
-    CodeQL: Taint from `application.properties` `jasypt.encryptor.password` to DB
-    connection
-
-    SonarCloud: Pattern - `jasypt.encryptor.password=demo-password # In
-    application.properties`
-
-
-    Notes:
-
-    CodeQL: No Jasypt-specific rule (gap)
-
-    SonarCloud: No Jasypt password rule (gap)'
+  message: |
+    Rule: Jasypt Encrypted Password in Properties File (SPRING-A02-001)
+    Detail: Secrets like jasypt.encryptor.password should not be stored directly in application.properties.
+    Pattern matched: application.properties references
+    Actual pattern: pattern-regex 'application\.properties'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: application\.properties
   paths:
     include:
     - '*.properties'
     - '*.yml'
+
 - id: SPRING-A02-002
-  message: 'Weak Password Encoder (NoOp, MD5, SHA-1) (SPRING-A02-002).
-
-
-    CodeQL: Taint flow to `NoOpPasswordEncoder.getInstance()` or `new
-    MessageDigestPasswordEncoder("MD5")`
-
-    SonarCloud: Pattern - `@Bean public PasswordEncoder passwordEncoder() { return
-    NoOpPasswordEncoder.getInstance(); }`
-
-
-    Notes:
-
-    CodeQL: [`java/weak-cryptographic-algorithm`](https://codeql.github.com/codeql-query-help/java/java-weak-cryptographic-algorithm/)
-    (covers weak hashes)
-
-    SonarCloud: [`java:S5542`](https://rules.sonarsource.com/java/RSPEC-5542/)
-    (overlaps)'
+  message: |
+    Rule: Weak Password Encoder (NoOp, MD5, SHA-1) (SPRING-A02-002)
+    Detail: Avoid NoOpPasswordEncoder or weak hash algorithms in password encoders.
+    Pattern matched: NoOpPasswordEncoder.getInstance()
+    Actual pattern: pattern-regex 'NoOpPasswordEncoder\.getInstance'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: NoOpPasswordEncoder\.getInstance
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A02-003
-  message: 'Hard-coded JWT Secret Key (SPRING-A02-003).
-
-
-    CodeQL: Taint from `application.yml` `jwt.secret: hardcoded` to `Jwts.builder()`
-
-    SonarCloud: Pattern - `String secret = "hardcoded-secret"; Jwts.builder()
-    .setClaims(claims).signWith(SignatureAlgorithm.HS256, secret).compact();`
-
-
-    Notes:
-
-    CodeQL: [`java/hardcoded-credentials`](https://codeql.github.com/codeql-query-help/java/java-hardcoded-credentials/)
-    (partially covers)
-
-    SonarCloud: [`java:S2068`](https://rules.sonarsource.com/java/RSPEC-2068/)
-    (overlaps)'
+  message: |
+    Rule: Hard-coded JWT Secret Key (SPRING-A02-003)
+    Detail: JWT secrets should not be hard-coded; load them from configuration or secrets.
+    Pattern matched: Jwts.builder(...) usage
+    Actual pattern: pattern-regex 'Jwts\.builder'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: Jwts\.builder
   paths:
     include:
     - '*.java'
     - '*.kt'
     - '*.yml'
+
 - id: SPRING-A02-004
-  message: 'Insecure Random for Security Context (SPRING-A02-004).
-
-
-    CodeQL: Taint from `new Random()` to `String token = new Random().nextInt()` for
-    security token
-
-    SonarCloud: Pattern - `String token = String.valueOf(new Random().nextInt(10000));
-    } // Used for password reset`
-
-
-    Notes:
-
-    CodeQL: [`java/weak-cryptographic-algorithm`](https://codeql.github.com/codeql-query-help/java/java-weak-cryptographic-algorithm/)
-    (covers weak random)
-
-    SonarCloud: No Random security rule (gap)'
+  message: |
+    Rule: Insecure Random for Security Context (SPRING-A02-004)
+    Detail: Do not use java.util.Random or timestamps for security tokens; use secure random sources.
+    Pattern matched: new Random(...) or Random usage
+    Actual pattern: pattern-regex 'Random'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: Random
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A02-005
-  message: 'TLS Certificate Validation Disabled (SPRING-A02-005).
-
-
-    CodeQL: Taint from untrusted host to `HttpsURLConnection` / `RestTemplate` with
-    custom `X509TrustManager` that trusts all certs
-
-    SonarCloud: Pattern - `sslContext.init(null, new TrustManager[]{new
-    X509TrustManager() { public void checkServerTrusted(...) {} }}, new
-    SecureRandom()); HttpsURLConnection.setDefaultSSLSocketFactory(sslContext.getSocketFactory());`
-
-
-    Notes:
-
-    CodeQL: [`java/disabling-hostname-verification`](https://codeql.github.com/codeql-query-help/java/java-disabling-hostname-verification/)
-    and related queries
-
-    SonarCloud: [`java:S4830`](https://rules.sonarsource.com/java/RSPEC-4830/)
-    (overlaps)'
+  message: |
+    Rule: TLS Certificate Validation Disabled (SPRING-A02-005)
+    Detail: Custom SSL contexts that trust all certificates weaken TLS validation.
+    Pattern matched: setSSLContext / SSL context configuration
+    Actual pattern: pattern-regex 'setSSLContext'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: setSSLContext
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A02-006
-  message: 'Hard-coded Secrets in Configuration Files (SPRING-A02-006).
-
-
-    CodeQL: Taint from config file literal to API client initialization
-
-    SonarCloud: Pattern - `api.key=sk_test_1234567890abcdef # In
-    application.properties`
-
-
-    Notes:
-
-    CodeQL: [`java/hardcoded-credentials`](https://codeql.github.com/codeql-query-help/java/java-hardcoded-credentials/)
-    (general)
-
-    SonarCloud: [`java:S2068`](https://rules.sonarsource.com/java/RSPEC-2068/)
-    (overlaps)'
+  message: |
+    Rule: Hard-coded Secrets in Configuration Files (SPRING-A02-006)
+    Detail: Values like api.key or other secrets should not be hard-coded in config files.
+    Pattern matched: api.key in properties or YAML
+    Actual pattern: pattern-regex 'api\.key'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: api\.key
   paths:
     include:
     - '*.properties'
     - '*.yml'
+
 - id: SPRING-A02-008
-  message: 'Insecure HTTP/TLS Configuration (SPRING-A02-008).
-
-
-    CodeQL: Pattern - `server.ssl.enabled=false` or `@RequestMapping` on HTTP only
-    endpoints
-
-    SonarCloud: Pattern: `server.ssl.enabled=false # In production profile`
-
-
-    Notes:
-
-    CodeQL: No Spring Boot TLS config rule (gap)
-
-    SonarCloud: No direct rule (gap)'
+  message: |
+    Rule: Insecure HTTP/TLS Configuration (SPRING-A02-008)
+    Detail: server.ssl.enabled=false disables HTTPS and should not be used casually in tutorials.
+    Pattern matched: server.ssl.enabled property
+    Actual pattern: pattern-regex 'server\.ssl\.enabled'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: server\.ssl\.enabled
   paths:
     include:
     - '*.properties'
     - '*.yml'
+
 - id: SPRING-A03-001
-  message: 'SQL Injection in JPA @Query (SPRING-A03-001).
-
-
-    CodeQL: Taint from `@Param` to `@Query` with string concatenation
-
-    SonarCloud: Pattern - `@Query("SELECT u FROM User u WHERE u.name = " + name)`
-    List<User> findByName(String name);`
-
-
-    Notes:
-
-    CodeQL: [`java/sql-injection`](https://codeql.github.com/codeql-query-help/java/java-sql-injection/)
-    (covers this)
-
-    SonarCloud: [`java:S3649`](https://rules.sonarsource.com/java/RSPEC-3649/)
-    (overlaps)'
+  message: |
+    Rule: SQL Injection in JPA @Query (SPRING-A03-001)
+    Detail: Avoid building JPQL/SQL queries via string concatenation in @Query definitions.
+    Pattern matched: @Query usage in repositories
+    Actual pattern: pattern-regex 'Query'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: Query
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A03-002
-  message: 'Command Injection via ProcessBuilder (SPRING-A03-002).
-
-
-    CodeQL: Taint from user-controlled input to `ProcessBuilder` command
-
-    SonarCloud: Pattern - `new ProcessBuilder("sh", "-c", "rm -rf " + userInput);`
-
-
-    Notes:
-
-    CodeQL: [`java/command-line-injection`](https://codeql.github.com/codeql-query-help/java/java-command-line-injection/)
-    (covers this)
-
-    SonarCloud: [`java:S2076`](https://rules.sonarsource.com/java/RSPEC-2076/)
-    (overlaps)'
+  message: |
+    Rule: Command Injection via ProcessBuilder (SPRING-A03-002)
+    Detail: Do not pass user-controlled strings directly to ProcessBuilder commands.
+    Pattern matched: ProcessBuilder(...)
+    Actual pattern: pattern-regex 'ProcessBuilder'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: ProcessBuilder
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A03-003
-  message: 'LDAP Injection in Authentication (SPRING-A03-003).
-
-
-    CodeQL: Taint from `@RequestParam` to LDAP query string for `DirContext.search`
-
-    SonarCloud: Pattern - `String filter = "(uid=" + username + ")"; ctx.search("ou=users,dc=example,dc=com",
-    filter, new SearchControls());`
-
-
-    Notes:
-
-    CodeQL: [`java/ldap-injection`](https://codeql.github.com/codeql-query-help/java/java-ldap-injection/)
-    (covers this)
-
-    SonarCloud: No LDAP rule (gap)'
+  message: |
+    Rule: LDAP Injection in Authentication (SPRING-A03-003)
+    Detail: LDAP filters should not be built with raw string concatenation from user input.
+    Pattern matched: DirContext.search(...)
+    Actual pattern: pattern-regex 'DirContext\.search'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: DirContext\.search
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A03-004
-  message: 'SpEL Injection in Expression Parsing (SPRING-A03-004).
-
-
-    CodeQL: Taint from user input to `SpelExpressionParser` without whitelist
-
-    SonarCloud: Pattern - `SpelExpressionParser parser = new SpelExpressionParser();
-    Expression exp = parser.parseRaw(userSuppliedExpression);`
-
-
-    Notes:
-
-    CodeQL: [`java/spring-expression-language-injection`](https://codeql.github.com/codeql-query-help/java/java-spring-expression-language-injection/)
-    (covers this)
-
-    SonarCloud: No SpEL rule (gap)'
+  message: |
+    Rule: SpEL Injection in Expression Parsing (SPRING-A03-004)
+    Detail: Avoid parsing user-supplied SpEL expressions directly with SpelExpressionParser.parseRaw.
+    Pattern matched: SpelExpressionParser.parseRaw(...)
+    Actual pattern: pattern-regex 'SpelExpressionParser\.parseRaw'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: SpelExpressionParser\.parseRaw
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A03-005
-  message: 'XSS via Thymeleaf th:utext (SPRING-A03-005).
-
-
-    CodeQL: Taint from model attribute to `th:utext="${modelAttr}"`
-
-    SonarCloud: Pattern - `<p th:utext="${userComment}"></p> <!-- In Thymeleaf
-    template -->`
-
-
-    Notes:
-
-    CodeQL: [`java/xss`](https://codeql.github.com/codeql-query-help/java/java-xss/)
-    (general)
-
-    SonarCloud: [`java:S5131`](https://rules.sonarsource.com/java/RSPEC-5131/)
-    (overlaps)'
+  message: |
+    Rule: XSS via Thymeleaf th:utext (SPRING-A03-005)
+    Detail: th:utext renders unescaped HTML; prefer th:text unless you sanitize explicitly.
+    Pattern matched: th:utext attributes in templates
+    Actual pattern: pattern-regex 'th:utext'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: th:utext
   paths:
     include:
     - '*.html'
     - '*.thymeleaf'
+
 - id: SPRING-A03-006
-  message: 'Reflected XSS in Error Pages (SPRING-A03-006).
-
-
-    CodeQL: Taint from request parameter to `model.addAttribute("error", param)` and
-    returned in HTML
-
-    SonarCloud: Pattern - `@GetMapping("/error") public String error(@RequestParam
-    String msg, Model model) { model.addAttribute("error", msg); return "error";
-    }`
-
-
-    Notes:
-
-    CodeQL: [`java/xss`](https://codeql.github.com/codeql-query-help/java/java-xss/)
-    (covers this)
-
-    SonarCloud: [`java:S5131`](https://rules.sonarsource.com/java/RSPEC-5131/)
-    (overlaps)'
+  message: |
+    Rule: Reflected XSS in Error Pages (SPRING-A03-006)
+    Detail: Do not echo raw user input into error messages or HTML responses.
+    Pattern matched: ResponseEntity.ok(...) patterns that may return user data
+    Actual pattern: pattern-regex 'ResponseEntity\.ok'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: ResponseEntity\.ok
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A03-008
-  message: 'Untrusted JavaScript Sources (No SRI) (SPRING-A03-008).
-
-
-    CodeQL: Pattern - `<script src="http://untrusted.com">` without integrity
-
-    SonarCloud: Pattern - `<script src="https://untrusted-cdn.com/jquery.min.js"></script>`
-
-
-    Notes:
-
-    CodeQL: No SRI rule (gap)
-
-    SonarCloud: No SRI rule (gap)'
+  message: |
+    Rule: Untrusted JavaScript Sources (No SRI) (SPRING-A03-008)
+    Detail: Remote script tags should be treated carefully; use HTTPS and consider SRI.
+    Pattern matched: <script src="http...">
+    Actual pattern: pattern-regex '<script src="http'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: '<script src="http'
   paths:
     include:
     - '*.html'
     - '*.jsp'
+
 - id: SPRING-A04-001
-  message: 'CORS Misconfiguration (Allowing All Origins) (SPRING-A04-001).
-
-
-    CodeQL: Taint from `@CrossOrigin(origins="*")` to controller
-
-    SonarCloud: Pattern - `@CrossOrigin(origins = "*") @RestController public class
-    ApiController { ... }`
-
-
-    Notes:
-
-    CodeQL: [`java/spring-disabled-cors`](https://codeql.github.com/codeql-query-help/java/java-spring-disabled-cors/)
-    (covers this)
-
-    SonarCloud: [`java:S5122`](https://rules.sonarsource.com/java/RSPEC-5122/)
-    (overlaps)'
+  message: |
+    Rule: CORS Misconfiguration (Allowing All Origins) (SPRING-A04-001)
+    Detail: @CrossOrigin(origins="*") should be avoided in example code without explanation.
+    Pattern matched: @CrossOrigin annotations
+    Actual pattern: pattern-regex 'CrossOrigin'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: CrossOrigin
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A04-002
-  message: 'Exposed Actuator Endpoints Without Security (SPRING-A04-002).
-
-
-    CodeQL: Taint from `/actuator/**` endpoints without security
-
-    SonarCloud: Pattern - `management.endpoints.web.exposure.include=*` in
-    application.properties without security config
-
-
-    Notes:
-
-    CodeQL: No dedicated actuator rule (gap)
-
-    SonarCloud: [`java:S5141`](https://rules.sonarsource.com/java/RSPEC-5141/)
-    (partial)'
+  message: |
+    Rule: Exposed Actuator Endpoints Without Security (SPRING-A04-002)
+    Detail: management.endpoints.web.exposure.include=* exposes all actuator endpoints.
+    Pattern matched: management.endpoints.* exposure settings
+    Actual pattern: pattern-regex 'management\.endpoints'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: management\.endpoints
   paths:
     include:
     - '*.properties'
     - '*.yml'
+
 - id: SPRING-A04-003
-  message: 'Open Redirect via RedirectView (SPRING-A04-003).
-
-
-    CodeQL: Taint from `@RequestParam("url")` to `new RedirectView(url)`
-
-    SonarCloud: Pattern - `@GetMapping("/redirect") public RedirectView
-    redirect(@RequestParam String url) { return new RedirectView(url); }`
-
-
-    Notes:
-
-    CodeQL: [`java/open-redirect`](https://codeql.github.com/codeql-query-help/java/java-open-redirect/)
-    (covers this)
-
-    SonarCloud: [`java:S5145`](https://rules.sonarsource.com/java/RSPEC-5145/)
-    (overlaps)'
+  message: |
+    Rule: Open Redirect via RedirectView (SPRING-A04-003)
+    Detail: RedirectView should not be created directly from user-controlled URLs.
+    Pattern matched: RedirectView constructors
+    Actual pattern: pattern-regex 'RedirectView'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: RedirectView
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A04-004
-  message: 'Missing Security Headers (SPRING Security Filter) (SPRING-A04-004).
-
-
-    CodeQL: Control flow shows `http.headers().disable()` or missing standard headers
-
-    SonarCloud: Pattern - `http.headers().frameOptions().disable();` without
-    compensating headers
-
-
-    Notes:
-
-    CodeQL: [`java/disabled-web-security`](https://codeql.github.com/codeql-query-help/java/java-spring-disabled-security/)
-    (partial)
-
-    SonarCloud: [`java:S5254`](https://rules.sonarsource.com/java/RSPEC-5254/)
-    (overlaps)'
+  message: |
+    Rule: Missing Security Headers (SPRING Security Filter) (SPRING-A04-004)
+    Detail: Avoid disabling http.headers() without adding equivalent protections.
+    Pattern matched: http.headers(...) usage
+    Actual pattern: pattern-regex 'http\.headers'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: http\.headers
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A04-005
-  message: 'Missing HTTPS Enforcement (SPRING-A04-005).
-
-
-    CodeQL: Control flow shows `requiresChannel().anyRequest().requiresInsecure()`
-    or no HTTPS redirect
-
-    SonarCloud: Pattern - `http.requiresChannel().anyRequest().requiresInsecure();`
-
-
-    Notes:
-
-    CodeQL: No direct HTTPS rule (gap)
-
-    SonarCloud: No direct HTTPS rule (gap)'
+  message: |
+    Rule: Missing HTTPS Enforcement (SPRING-A04-005)
+    Detail: Spring Security configuration should typically enforce HTTPS, not insecure channels.
+    Pattern matched: requiresChannel(...) calls
+    Actual pattern: pattern-regex 'requiresChannel'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: requiresChannel
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A04-006
-  message: 'Debug/Actuator Mode Enabled in Production (SPRING-A04-006).
-
-
-    CodeQL: Pattern - `spring-boot-devtools` on classpath or `management.endpoints.web.exposure.include=*`
-    in production profile
-
-    SonarCloud: Pattern - `spring-boot-devtools` dependency in `pom.xml`
-
-
-    Notes:
-
-    CodeQL: No devtools rule (gap)
-
-    SonarCloud: No dedicated devtools rule'
+  message: |
+    Rule: Debug/Actuator Mode Enabled in Production (SPRING-A04-006)
+    Detail: spring-boot-devtools should not be present in production builds.
+    Pattern matched: spring-boot-devtools dependency
+    Actual pattern: pattern-regex 'spring-boot-devtools'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: spring-boot-devtools
   paths:
     include:
     - 'pom.xml'
+
 - id: SPRING-A05-001
-  message: 'Insecure File Upload Without Validation (SPRING-A05-001).
-
-
-    CodeQL: Taint from `MultipartFile` to `File` write without validation
-
-    SonarCloud: Pattern - `Files.copy(file.getInputStream(), target.toPath(),
-    StandardCopyOption.REPLACE_EXISTING);` without extension or size checks
-
-
-    Notes:
-
-    CodeQL: [`java/path-injection`](https://codeql.github.com/codeql-query-help/java/java-path-injection/)
-    and related queries
-
-    SonarCloud: [`java:S4784`](https://rules.sonarsource.com/java/RSPEC-4784/)
-    (partial)'
+  message: |
+    Rule: Insecure File Upload Without Validation (SPRING-A05-001)
+    Detail: MultipartFile uploads should validate file type, size, and path before writing.
+    Pattern matched: MultipartFile parameters or usage
+    Actual pattern: pattern-regex 'MultipartFile'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: MultipartFile
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A05-002
-  message: 'File Upload Without Size Limits (SPRING-A05-002).
-
-
-    CodeQL: Pattern - `MultipartFile` upload without `spring.servlet.multipart.max-file-size`
-    or size validation
-
-    SonarCloud: Pattern - `MultipartFile file` in controller without size check
-
-
-    Notes:
-
-    CodeQL: No specific max-size rule (gap)
-
-    SonarCloud: No direct rule (gap)'
+  message: |
+    Rule: File Upload Without Size Limits (SPRING-A05-002)
+    Detail: Tutorials should show max file size limits for uploads (spring.servlet.multipart.max-file-size).
+    Pattern matched: multipart max-file-size configuration
+    Actual pattern: pattern-regex 'spring\.servlet\.multipart\.max-file-size'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: spring\.servlet\.multipart\.max-file-size
   paths:
     include:
     - '*.properties'
     - '*.yml'
+
 - id: SPRING-A05-003
-  message: 'Directory Traversal in File Storage (SPRING-A05-003).
-
-
-    CodeQL: Taint from `MultipartFile.getOriginalFilename()` to `Paths.get(uploadDir,
-    filename)`
-
-    SonarCloud: Pattern - `String filename = StringUtils.cleanPath(file.getOriginalFilename());
-    Path filePath = this.uploadDir.resolve(filename);`
-
-
-    Notes:
-
-    CodeQL: [`java/path-injection`](https://codeql.github.com/codeql-query-help/java/java-path-injection/)
-    (covers this)
-
-    SonarCloud: [`java:S4784`](https://rules.sonarsource.com/java/RSPEC-4784/)
-    (overlaps)'
+  message: |
+    Rule: Directory Traversal in File Storage (SPRING-A05-003)
+    Detail: getOriginalFilename() should not be used directly to build filesystem paths.
+    Pattern matched: getOriginalFilename() usage
+    Actual pattern: pattern-regex 'getOriginalFilename'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: getOriginalFilename
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A05-004
-  message: 'Insecure File Download (Content-Type and Disposition) (SPRING-A05-004).
-
-
-    CodeQL: Taint from filename to `ResponseEntity.ok().body(resource)` without
-    setting `Content-Disposition`
-
-    SonarCloud: Pattern - `return ResponseEntity.ok(resource); // No attachment
-    header`
-
-
-    Notes:
-
-    CodeQL: No specific header rule (gap)
-
-    SonarCloud: [`java:S5693`](https://rules.sonarsource.com/java/RSPEC-5693/)
-    (partial)'
+  message: |
+    Rule: Insecure File Download (Content-Type and Disposition) (SPRING-A05-004)
+    Detail: ResponseEntity.ok(resource) should set content type and Content-Disposition for downloads.
+    Pattern matched: ResponseEntity.ok(...) in download contexts
+    Actual pattern: pattern-regex 'ResponseEntity\.ok'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: ResponseEntity\.ok
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A06-001
-  message: 'Maven Dependency Without Version (SPRING-A06-001).
-
-
-    CodeQL: Pattern - `<dependency><groupId>org.springframework</groupId><artifactId>spring-core</artifactId></dependency>`
-    without `<version>` or dependencyManagement
-
-    SonarCloud: Pattern - Dependency without version in `pom.xml`
-
-
-    Notes:
-
-    CodeQL: No specific rule (gap)
-
-    SonarCloud: No specific rule (gap)'
+  message: |
+    Rule: Maven Dependency Without Version (SPRING-A06-001)
+    Detail: Dependencies should specify versions or use dependencyManagement to pin them.
+    Pattern matched: <dependency> elements in pom.xml
+    Actual pattern: pattern-regex '<dependency>'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: '<dependency>'
   paths:
     include:
     - 'pom.xml'
+
 - id: SPRING-A06-002
-  message: 'Maven Dependency With Version Range (SPRING-A06-002).
-
-
-    CodeQL: Pattern - `<version>[1.0,2.0)</version>` in dependency
-
-    SonarCloud: Pattern - Version ranges in `pom.xml`
-
-
-    Notes:
-
-    CodeQL: No dedicated range rule (gap)
-
-    SonarCloud: No dedicated range rule (gap)'
+  message: |
+    Rule: Maven Dependency With Version Range (SPRING-A06-002)
+    Detail: Version ranges make builds non-deterministic; pin explicit versions instead.
+    Pattern matched: <version> elements in pom.xml
+    Actual pattern: pattern-regex '<version>'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: '<version>'
   paths:
     include:
     - 'pom.xml'
+
 - id: SPRING-A06-003
-  message: 'Logback Vulnerable Version (CVE-2021-44228) (SPRING-A06-003).
-
-
-    CodeQL: Dependency on `logback-classic:1.2.0` (Log4Shell variant)
-
-    SonarCloud: Pattern - `<artifactId>logback-classic</artifactId><version>1.2.0</version></dependency>`
-
-
-    Notes:
-
-    CodeQL: No specific CVE rule (gap)
-
-    SonarCloud: No specific CVE rule (gap)'
+  message: |
+    Rule: Logback Vulnerable Version (SPRING-A06-003)
+    Detail: Check logback-classic versions for known CVEs instead of using old versions blindly.
+    Pattern matched: logback-classic dependency
+    Actual pattern: pattern-regex 'logback-classic'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: logback-classic
   paths:
     include:
     - 'pom.xml'
+
 - id: SPRING-A06-004
-  message: 'Vulnerable Spring Boot Starter Version (SPRING-A06-004).
-
-
-    CodeQL: Dependency on `spring-boot-starter-web:2.3.0.RELEASE` with known CVEs
-
-    SonarCloud: Pattern - `<artifactId>spring-boot-starter-web</artifactId><version>2.3.0.RELEASE</version>`
-
-
-    Notes:
-
-    CodeQL: No specific starter rule (gap)
-
-    SonarCloud: No specific starter rule (gap)'
+  message: |
+    Rule: Vulnerable Spring Boot Starter Version (SPRING-A06-004)
+    Detail: spring-boot-starter-web versions should be checked for known vulnerabilities.
+    Pattern matched: spring-boot-starter-web dependency
+    Actual pattern: pattern-regex 'spring-boot-starter-web'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: spring-boot-starter-web
   paths:
     include:
     - 'pom.xml'
+
 - id: SPRING-A06-005
-  message: 'Vulnerable Jackson Databind Version (SPRING-A06-005).
-
-
-    CodeQL: Dependency on `com.fasterxml.jackson.core:jackson-databind:2.9.x` with
-    known CVEs
-
-    SonarCloud: Pattern - `<artifactId>jackson-databind</artifactId><version>2.9.10.3</version>`
-
-
-    Notes:
-
-    CodeQL: No specific Jackson CVE rule (gap)
-
-    SonarCloud: No specific Jackson CVE rule (gap)'
+  message: |
+    Rule: Vulnerable Jackson Databind Version (SPRING-A06-005)
+    Detail: jackson-databind versions should be kept patched due to frequent CVEs.
+    Pattern matched: jackson-databind dependency
+    Actual pattern: pattern-regex 'jackson-databind'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: jackson-databind
   paths:
     include:
     - 'pom.xml'
+
 - id: SPRING-A06-006
-  message: 'Unpinned Dependencies (No Dependency Management) (SPRING-A06-006).
-
-
-    CodeQL: Pattern - Direct dependency version literals not managed under
-    `<dependencyManagement>`
-
-    SonarCloud: Pattern - `<artifactId>guava</artifactId><version>28.0</version></dependency>`
-
-
-    Notes:
-
-    CodeQL: No specific management rule (gap)
-
-    SonarCloud: No specific management rule (gap)'
+  message: |
+    Rule: Unpinned Dependencies (No Dependency Management) (SPRING-A06-006)
+    Detail: Use dependencyManagement to control versions of transitive dependencies.
+    Pattern matched: dependencyManagement sections
+    Actual pattern: pattern-regex 'dependencyManagement'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: dependencyManagement
   paths:
     include:
     - 'pom.xml'
+
 - id: SPRING-A06-007
-  message: 'Remote JavaScript Without Integrity (SRI) (SPRING-A06-007).
-
-
-    CodeQL: Pattern - `<script src="https://cdn.example.com/lib.js"></script>` without
-    `integrity` attribute
-
-    SonarCloud: Pattern - `<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>`
-
-
-    Notes:
-
-    CodeQL: No SRI rule (gap)
-
-    SonarCloud: No SRI rule (gap)'
+  message: |
+    Rule: Remote JavaScript Without Integrity (SRI) (SPRING-A06-007)
+    Detail: Consider integrity attributes for remote scripts in production-facing examples.
+    Pattern matched: integrity attribute in script tags
+    Actual pattern: pattern-regex 'integrity'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: integrity
   paths:
     include:
     - '*.html'
     - '*.jsp'
+
 - id: SPRING-A07-001
-  message: 'Plaintext Password Storage in Database (SPRING-A07-001).
-
-
-    CodeQL: Taint from password field to `user.setPassword(rawPassword)` without
-    encoder
-
-    SonarCloud: Pattern - `user.setPassword(password); // No passwordEncoder`
-
-
-    Notes:
-
-    CodeQL: [`java/plaintext-storage`](https://codeql.github.com/codeql-query-help/java/java-plaintext-storage/)
-    (covers this)
-
-    SonarCloud: [`java:S2053`](https://rules.sonarsource.com/java/RSPEC-2053/)
-    (overlaps)'
+  message: |
+    Rule: Plaintext Password Storage in Database (SPRING-A07-001)
+    Detail: Passwords should be encoded (hashed) before being stored or logged.
+    Pattern matched: user.getPassword / setPassword without encoder
+    Actual pattern: pattern-regex 'user\.getPassword'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: user\.getPassword
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A07-002
-  message: 'Password Reset Token Predictable or Reused (SPRING-A07-002).
-
-
-    CodeQL: Taint from `Random` / timestamp to password reset token
-
-    SonarCloud: Pattern - `String token = String.valueOf(System.currentTimeMillis());`
-
-
-    Notes:
-
-    CodeQL: [`java/weak-cryptographic-algorithm`](https://codeql.github.com/codeql-query-help/java/java-weak-cryptographic-algorithm/)
-    (partial)
-
-    SonarCloud: No token rule (gap)'
+  message: |
+    Rule: Password Reset Token Predictable or Reused (SPRING-A07-002)
+    Detail: Tokens must be random and not based only on timestamps or simple counters.
+    Pattern matched: System.currentTimeMillis used for token
+    Actual pattern: pattern-regex 'System\.currentTimeMillis'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: System\.currentTimeMillis
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A07-003
-  message: 'Username Enumeration via Error Messages (SPRING-A07-003).
-
-
-    CodeQL: Taint from `authException.getMessage()` to response showing different
-    messages for user-not-found vs wrong-password
-
-    SonarCloud: Pattern - `if (!userExists) { throw new UsernameNotFoundException("User
-    not found"); } else { throw new BadCredentialsException("Invalid password");
-    }`
-
-
-    Notes:
-
-    CodeQL: No specific username enumeration rule (gap)
-
-    SonarCloud: No specific enumeration rule (gap)'
+  message: |
+    Rule: Username Enumeration via Error Messages (SPRING-A07-003)
+    Detail: Avoid distinct error messages for user-not-found vs wrong-password.
+    Pattern matched: authException.getMessage or similar
+    Actual pattern: pattern-regex 'authException\.getMessage'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: authException\.getMessage
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A07-004
-  message: 'Password Reset Token Not Invalidated After Use (SPRING-A07-004).
-
-
-    CodeQL: Dataflow shows token deleted from DB but not checked if used
-
-    SonarCloud: Pattern - `if (token.isValid()) { // No mark as used`<br>`user.setPassword(newPassword);
-    }`
-
-
-    Notes:
-
-    CodeQL: No explicit token invalidation rule (gap)
-
-    SonarCloud: No explicit token invalidation rule (gap)'
+  message: |
+    Rule: Password Reset Token Not Invalidated After Use (SPRING-A07-004)
+    Detail: Password reset tokens should be invalidated or marked used after successful reset.
+    Pattern matched: setPassword(...) in reset flows
+    Actual pattern: pattern-regex 'setPassword'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: setPassword
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A07-005
-  message: 'Missing Password Strength Validation (SPRING-A07-005).
-
-
-    CodeQL: Taint from password field to `user.setPassword(password)` without
-    strength check
-
-    SonarCloud: Pattern - `user.setPassword(password); // No validation of password
-    strength`
-
-
-    Notes:
-
-    CodeQL: No strength rule (gap)
-
-    SonarCloud: No strength rule (gap)'
+  message: |
+    Rule: Missing Password Strength Validation (SPRING-A07-005)
+    Detail: Tutorials should show basic password strength checks before accepting passwords.
+    Pattern matched: setPassword(...) without validation
+    Actual pattern: pattern-regex 'setPassword'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: setPassword
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A07-006
-  message: 'Missing Account Lockout Mechanism (Brute-Force Protection)
-    (SPRING-A07-006).
-
-
-    CodeQL: Control flow shows authentication logic without failed attempts counter
-
-    SonarCloud: Pattern - `public void login(String u, String p) { // No lockout logic
-    } }`
-
-
-    Notes:
-
-    CodeQL: No lockout rule (gap)
-
-    SonarCloud: No lockout rule (gap)'
+  message: |
+    Rule: Missing Account Lockout Mechanism (Brute-Force Protection) (SPRING-A07-006)
+    Detail: Login flows should consider lockout or throttling after multiple failed attempts.
+    Pattern matched: login(...) methods
+    Actual pattern: pattern-regex 'login'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: login
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A08-001
-  message: 'Insecure Deserialization with Default Jackson (SPRING-A08-001).
-
-
-    CodeQL: Taint from `request.getInputStream()` to `objectMapper.readValue(,
-    Object.class)` with default typing
-
-    SonarCloud: Pattern - `Object data =
-    objectMapper.readValue(request.getInputStream(), Object.class); //
-    Deserializes any class`
-
-
-    Notes:
-
-    CodeQL: [`java/unsafe-deserialization`](https://codeql.github.com/codeql-query-help/java/java-unsafe-deserialization/)
-    (partial)
-
-    SonarCloud: [`java:S2092`](https://rules.sonarsource.com/java/RSPEC-2092/)
-    (overlaps)'
+  message: |
+    Rule: Insecure Deserialization with Default Jackson (SPRING-A08-001)
+    Detail: Avoid deserializing into Object.class or polymorphic types without restrictions.
+    Pattern matched: objectMapper.readValue(...)
+    Actual pattern: pattern-regex 'readValue'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: readValue
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A08-002
-  message: 'Missing Signature Verification for Webhook Payloads (SPRING-A08-002).
-
-
-    CodeQL: Taint from `request.getInputStream()` to business logic without HMAC
-    verification
-
-    SonarCloud: Pattern - `@PostMapping("/webhook") public ResponseEntity<String>
-    webhook(HttpServletRequest request) { // No signature check }`
-
-
-    Notes:
-
-    CodeQL: No webhook rule (gap)
-
-    SonarCloud: No webhook rule (gap)'
+  message: |
+    Rule: Missing Signature Verification for Webhook Payloads (SPRING-A08-002)
+    Detail: Webhook endpoints should verify signatures or HMAC of incoming requests.
+    Pattern matched: @PostMapping webhook handlers
+    Actual pattern: pattern-regex 'PostMapping'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: PostMapping
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A08-003
-  message: 'Template Injection via FreeMarker (SPRING-A08-003).
-
-
-    CodeQL: Taint from model map to `Configuration.getTemplate()` with untrusted
-    template name
-
-    SonarCloud: Pattern - `Template t = configuration.getTemplate(templateName);`
-    with user-controlled `templateName`
-
-
-    Notes:
-
-    CodeQL: [`java/template-injection`](https://codeql.github.com/codeql-query-help/java/java-template-injection/)
-    (general)
-
-    SonarCloud: No FreeMarker-specific rule (gap)'
+  message: |
+    Rule: Template Injection via FreeMarker (SPRING-A08-003)
+    Detail: Template names passed to FreeMarker should not be taken directly from user input.
+    Pattern matched: Configuration.getTemplate(...)
+    Actual pattern: pattern-regex 'Configuration\.getTemplate'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: Configuration\.getTemplate
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A08-004
-  message: 'Maven Dependency with Known CVE (No Version Management) (SPRING-A08-004).
-
-
-    CodeQL: Dependency graph shows library version with CVE and no
-    `<dependencyManagement>`
-
-    SonarCloud: Pattern - `<artifactId>jackson-databind</artifactId><version>2.9.10.3</version></dependency>`
-
-
-    Notes:
-
-    CodeQL: No automatic CVE mapping for tutorials
-
-    SonarCloud: No automatic CVE mapping for tutorials'
+  message: |
+    Rule: Maven Dependency with Known CVE (No Version Management) (SPRING-A08-004)
+    Detail: Dependencies should be tracked for CVEs and pinned via dependencyManagement.
+    Pattern matched: dependencyManagement blocks referencing vulnerable libs
+    Actual pattern: pattern-regex 'dependencyManagement'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: dependencyManagement
   paths:
     include:
     - 'pom.xml'
+
 - id: SPRING-A08-005
-  message: 'Missing Checksum Verification for Downloaded Dependencies
-    (SPRING-A08-005).
-
-
-    CodeQL: Control flow shows `maven-dependency-plugin:copy` without checksum
-    verification
-
-    SonarCloud: Pattern - `curl https://repo.maven.apache.org/maven2/.../app.jar  #
-    No checksum`
-
-
-    Notes:
-
-    CodeQL: No checksum rule (gap)
-
-    SonarCloud: No checksum rule (gap)'
+  message: |
+    Rule: Missing Checksum Verification for Downloaded Dependencies (SPRING-A08-005)
+    Detail: Tutorials should show checksum verification when downloading artifacts with Maven plugins or curl/wget.
+    Pattern matched: maven-dependency-plugin:copy usage
+    Actual pattern: pattern-regex 'maven-dependency-plugin:copy'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: "maven-dependency-plugin:copy"
-
   paths:
     include:
     - 'pom.xml'
+
 - id: SPRING-A09-001
-  message: 'Clear-text Logging of Sensitive Data (SPRING-A09-001).
-
-
-    CodeQL: Taint from password or token to logger
-
-    SonarCloud: Pattern - `log.info("User password: {}", user.getPassword());`
-
-
-    Notes:
-
-    CodeQL: [`java/log-injection`](https://codeql.github.com/codeql-query-help/java/java-log-injection/)
-    (partial)
-
-    SonarCloud: [`java:S2068`](https://rules.sonarsource.com/java/RSPEC-2068/)
-    (overlaps)'
+  message: |
+    Rule: Clear-text Logging of Sensitive Data (SPRING-A09-001)
+    Detail: Do not log passwords, tokens, or other secrets in plain text.
+    Pattern matched: user.getPassword(...) in logging or similar
+    Actual pattern: pattern-regex 'user\.getPassword'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: user\.getPassword
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A09-002
-  message: 'Insufficient Exception Logging (Swallowing Security Exceptions)
-    (SPRING-A09-002).
-
-
-    CodeQL: Control flow shows catch block that ignores security exceptions
-
-    SonarCloud: Pattern - `catch (AuthenticationException e) { // empty }`
-
-
-    Notes:
-
-    CodeQL: [`java/ignored-exceptions`](https://codeql.github.com/codeql-query-help/java/java-ignored-exceptions/)
-    (general)
-
-    SonarCloud: [`java:S108`](https://rules.sonarsource.com/java/RSPEC-108/)
-    (partial)'
+  message: |
+    Rule: Insufficient Exception Logging (Swallowing Security Exceptions) (SPRING-A09-002)
+    Detail: Security-relevant exceptions should not be silently swallowed.
+    Pattern matched: catch blocks (check manually if they ignore exceptions)
+    Actual pattern: pattern-regex 'catch'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: catch
   paths:
     include:
@@ -1209,198 +694,111 @@ rules:
     - '*.kt'
 
 - id: SPRING-A09-004
-  message: 'Stack Trace Exposed to Client (SPRING-A09-004).
-
-
-    CodeQL: Taint from exception to response body
-
-    SonarCloud: Pattern - `catch (Exception e) { return
-    ResponseEntity.status(500).body(e.getMessage()); }` or `e.printStackTrace();`
-    in controller
-
-
-    Notes:
-
-    CodeQL: [`java/stack-trace-exposure`](https://codeql.github.com/codeql-query-help/java/java-stack-trace-exposure/)
-    (covers this)
-
-    SonarCloud: [`java:S2228`](https://rules.sonarsource.com/java/RSPEC-2228/)
-    (overlaps)'
+  message: |
+    Rule: Stack Trace Exposed to Client (SPRING-A09-004)
+    Detail: Do not return exception messages or stack traces directly in HTTP responses.
+    Pattern matched: Exception.printStackTrace or similar
+    Actual pattern: pattern-regex 'Exception\.printStackTrace'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: Exception\.printStackTrace
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A09-005
-  message: 'No Security Event Logging for Failed Logins (SPRING-A09-005).
-
-
-    CodeQL: Authentication failure path without log call
-
-    SonarCloud: Pattern - `catch (BadCredentialsException e) { // no log.warn }`
-
-
-    Notes:
-
-    CodeQL: No failed-login logging rule (gap)
-
-    SonarCloud: No failed-login logging rule (gap)'
+  message: |
+    Rule: No Security Event Logging for Failed Logins (SPRING-A09-005)
+    Detail: Failed login attempts should be logged for security monitoring.
+    Pattern matched: log.warn(...) (used to model where logging should exist)
+    Actual pattern: pattern-regex 'log\.warn'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: log\.warn
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A10-001
-  message: 'SSRF via RestTemplate with User-Controlled URL (SPRING-A10-001).
-
-
-    CodeQL: Taint from request parameter to `RestTemplate.getForObject()` URL
-
-    SonarCloud: Pattern - `restTemplate.getForObject(url, String.class);` with
-    unvalidated `url`
-
-
-    Notes:
-
-    CodeQL: [`java/ssrf`](https://codeql.github.com/codeql-query-help/java/java-ssrf/)
-    (covers this)
-
-    SonarCloud: [`java:S5443`](https://rules.sonarsource.com/java/RSPEC-5443/)
-    (overlaps)'
+  message: |
+    Rule: SSRF via RestTemplate with User-Controlled URL (SPRING-A10-001)
+    Detail: RestTemplate.getForObject should not be called with unvalidated user-controlled URLs.
+    Pattern matched: restTemplate.getForObject(...)
+    Actual pattern: pattern-regex 'restTemplate\.getForObject'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: restTemplate\.getForObject
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A10-002
-  message: 'File Disclosure via file: Protocol in ResourceLoader (SPRING-A10-002).
-
-
-    CodeQL: Taint from `@PathVariable` to `resourceLoader.getResource("file:" +
-    path)`
-
-    SonarCloud: Pattern - `return resourceLoader.getResource("file:" + path); //
-    /etc/passwd`
-
-
-    Notes:
-
-    CodeQL: [`java/path-injection`](https://codeql.github.com/codeql-query-help/java/java-path-injection/)
-    (covers this)
-
-    SonarCloud: No specific file protocol rule (gap)'
+  message: |
+    Rule: File Disclosure via file: Protocol in ResourceLoader (SPRING-A10-002)
+    Detail: ResourceLoader.getResource("file:" + path) from user input can expose arbitrary files.
+    Pattern matched: resourceLoader.getResource(...)
+    Actual pattern: pattern-regex 'resourceLoader\.getResource'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: resourceLoader\.getResource
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A10-003
-  message: 'JNDI Injection via User-Controlled Name (SPRING-A10-003).
-
-
-    CodeQL: Taint from request parameter to `new InitialContext().lookup(name)`
-
-    SonarCloud: Pattern - `public Object jndi(String name) { return new
-    InitialContext().lookup(name); } // JNDI injection`
-
-
-    Notes:
-
-    CodeQL: [`java/jndi-injection`](https://codeql.github.com/codeql-query-help/java/java-jndi-injection/)
-    (covers this)
-
-    SonarCloud: [`java:S6437`](https://rules.sonarsource.com/java/RSPEC-6437/)
-    (overlaps)'
+  message: |
+    Rule: JNDI Injection via User-Controlled Name (SPRING-A10-003)
+    Detail: InitialContext.lookup(...) should not use raw user-controlled JNDI names.
+    Pattern matched: new InitialContext().lookup(...)
+    Actual pattern: pattern-regex 'InitialContext'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: InitialContext
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A10-004
-  message: 'XXE in XML Parsing with DocumentBuilder (SPRING-A10-004).
-
-
-    CodeQL: Taint from `request.getInputStream()` to `DocumentBuilder.parse()` without
-    secure factory settings
-
-    SonarCloud: Pattern - `DocumentBuilderFactory dbf =
-    DocumentBuilderFactory.newInstance(); DocumentBuilder db =
-    dbf.newDocumentBuilder(); db.parse(request.getInputStream()); // XXE`
-
-
-    Notes:
-
-    CodeQL: [`java/xxe`](https://codeql.github.com/codeql-query-help/java/java-xxe/)
-    (covers this)
-
-    SonarCloud: [`java:S2755`](https://rules.sonarsource.com/java/RSPEC-2755/)
-    (overlaps)'
+  message: |
+    Rule: XXE in XML Parsing with DocumentBuilder (SPRING-A10-004)
+    Detail: DocumentBuilder.parse(request.getInputStream()) must disable external entities.
+    Pattern matched: request.getInputStream() into XML parsing
+    Actual pattern: pattern-regex 'request\.getInputStream'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: request\.getInputStream
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A10-005
-  message: 'DNS Rebinding via SSRF Filter Bypass (SPRING-A10-005).
-
-
-    CodeQL: Taint from URL to `RestTemplate` with DNS rebinding checks missing or
-    bypassed
-
-    SonarCloud: Pattern - `restTemplate.getForObject(url, String.class); // Resolves
-    DNS on each request`
-
-
-    Notes:
-
-    CodeQL: [`java/ssrf`](https://codeql.github.com/codeql-query-help/java/java-ssrf/)
-    (covers this)
-
-    SonarCloud: No DNS rebinding-specific rule (gap)'
+  message: |
+    Rule: DNS Rebinding via SSRF Filter Bypass (SPRING-A10-005)
+    Detail: SSRF protections should account for DNS rebinding, not just initial host checks.
+    Pattern matched: restTemplate.getForObject(...) again used for remote calls
+    Actual pattern: pattern-regex 'restTemplate\.getForObject'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: restTemplate\.getForObject
   paths:
     include:
     - '*.java'
     - '*.kt'
+
 - id: SPRING-A10-006
-  message: 'Blind Trust of Proxy Headers (IP Spoofing) (SPRING-A10-006).
-
-
-    CodeQL: Taint from `X-Forwarded-For` header used directly without validation
-
-    SonarCloud: Pattern - `String ip = request.getHeader("X-Forwarded-For"); // Trust
-    user-provided IP`
-
-
-    Notes:
-
-    CodeQL: No proxy header rule (gap)
-
-    SonarCloud: No proxy header rule (gap)'
+  message: |
+    Rule: Blind Trust of Proxy Headers (IP Spoofing) (SPRING-A10-006)
+    Detail: Do not trust X-Forwarded-For and similar headers without validation or a trusted proxy.
+    Pattern matched: request.getHeader(...) usage
+    Actual pattern: pattern-regex 'request\.getHeader'
   severity: ERROR
-  languages:
-  - generic
+  languages: [generic]
   pattern-regex: request\.getHeader
   paths:
     include:

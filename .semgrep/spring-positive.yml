@@ -79,20 +79,13 @@ rules:
 
   # 6. Admin endpoint must have @PreAuthorize
   - id: POS-admin-authz
-    pattern: |
-      @GetMapping($P)
-      public $RET $METHOD(..) {
-        ...
-      }
-    metavariable-regex:
-      metavariable: $P
-      regex: ^"/admin/.*"
+    pattern-regex: '@GetMapping\("/admin/.*"\)'
     message: |
       🔒  **Beginner safety**: admin endpoints should use method-level authorization,
       e.g. `@PreAuthorize("hasRole('ADMIN')")`. Tutorials should always model this
       practice on `/admin/**` routes.
     severity: ERROR
-    languages: [java]
+    languages: [generic]
 
   # 7. findById must check ownership (IDOR guard)
   - id: POS-idor-ownership
