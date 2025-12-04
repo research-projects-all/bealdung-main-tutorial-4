@@ -14,14 +14,14 @@ jobs:
       - name: Install Semgrep
         run: pip install semgrep
 
-      # ---------- 1. Custom 70-rule set ----------
+           # ---------- 1. Custom 70-rule set ----------
       - name: Run custom Spring rules
         run: |
           echo "🔍 Scanning custom rule-set (70 rules)..."
           semgrep --config=.semgrep/spring-custom.yml \
                   --error \
                   --output=custom.txt \
-                  src/ || true
+                  .  # <-- scan root
 
       # ---------- 2. Positive 7-rule set ----------
       - name: Run beginner positive rules
@@ -30,7 +30,7 @@ jobs:
           semgrep --config=.semgrep/spring-positive.yml \
                   --error \
                   --output=positive.txt \
-                  src/ || true
+                  .  # <-- scan root
 
       # ---------- 3. Console summary ----------
       - name: Generate summary
