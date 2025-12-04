@@ -98,59 +98,66 @@ jobs:
       # ------------------------------------------------------------------
       # 3.  GENERATE  CONSOLE  REPORT  (ERROR  vs  WARNING)
       # ------------------------------------------------------------------
-      - name: Generate summary and fail if needed
+      - name: Generate vulnerability list  (SonarCloud/CodeQL style)
         if: always()
         shell: bash
         run: |
-          echo "=============================================="
-          echo "🔐 Semgrep security summary"
-          echo "=============================================="
+          echo ""
+          echo "========  VULNERABILITY  DETAILS  (Semgrep)  ========"
+          echo ""
 
-          # 1.  CUSTOM  ERRORS  (vulnerabilities)
+          # 1.  CUSTOM  ERRORS  (severity ERROR)
           if [ -s custom.txt ]; then
-            echo "❌ CUSTOM RULES – VULNERABILITIES FOUND:"
-            cat custom.txt
+            echo "❌ ERRORS – real vulnerabilities:"
+            awk '
+              /^ *┌─/       { file=$2 ; next }
+              /^ *│ .*┆/   { gsub(/[⋮┆]/,""); line=$2 ; next }
+              /^ *❯❯❱/     { rule=$2 ; gsub(/.*Rule:/,""); gsub(/Detail:.*/,""); type=$0 ; next }
+              /^ *[0-9]+┆/ { gsub(/[⋮┆]/,""); gsub(/^ */,""); code=$0 ;
+                            printf "%-35s | %-40s | %-60s | %5s | %s\n", rule, type, file, line, code ;
+                            next }
+            ' custom.txt
             echo ""
-          else
-            echo "✅ CUSTOM RULES – PASSED (no ERROR findings)"
           fi
 
-          echo "----------------------------------------------"
-
-          # 2.  POSITIVE  COVERAGE  (missing = ERROR,  present = WARNING)
-          echo "🔎 Secure-by-default coverage (beginner positive rules):"
-          cat positive-coverage.txt
-
+          # 2.  POSITIVE  MISSING  (ERROR – not secure-by-default)
           if [ -s positive-missing.txt ]; then
-            echo ""
-            echo "❌ SECURE-BY-DEFAULT – FAILED"
-            echo "The following positive rules had NO matches in this tutorial:"
-            cat positive-missing.txt
-            echo ""
-          else
-            echo ""
-            echo "✅ SECURE-BY-DEFAULT – PASSED"
-            echo "All 7 beginner positive rules are present at least once."
-          fi
-
-          # 3.  WARNINGS  (best-practice hints  –  do  not  fail)
-          if [ -s positive.txt ]; then
-            echo ""
-            echo "⚠️  WARNINGS – best-practice hints (no fail):"
-            cat positive.txt
+            echo "❌ ERRORS – missing secure-by-default patterns:"
+            while IFS= read -r id; do
+              printf "%-35s | %-40s | %-60s | %5s | %s\n" \
+                     "$id" \
+                     "Missing secure-by-default pattern" \
+                     "tutorial source" \
+                     "-" \
+                     "Pattern not present in codebase"
+            done < positive-missing.txt
             echo ""
           fi
 
-          echo "=============================================="
+          # 3.  POSITIVE  PRESENT  (WARNING – best-practice only)
+          if [ -s positive.txt ] && grep -q 'severity:WARNING\|severity:warning' positive.txt; then
+            echo "⚠️  WARNINGS – best-practice hints:"
+            awk '
+              /^ *┌─/       { file=$2 ; next }
+              /^ *│ .*┆/   { gsub(/[⋮┆]/,""); line=$2 ; next }
+              /^ *❯❯❱/     { rule=$2 ; gsub(/.*Rule:/,""); gsub(/Detail:.*/,""); type=$0 ; next }
+              /^ *[0-9]+┆/ { gsub(/[⋮┆]/,""); gsub(/^ */,""); code=$0 ;
+                            printf "%-35s | %-40s | %-60s | %5s | %s\n", rule, type, file, line, code ;
+                            next }
+            ' positive.txt
+            echo ""
+          fi
 
-          # 4.  PASS / FAIL  DECISION
+          echo "====================================================="
+
+          # 4.  PASS / FAIL  DECISION  (only on ERRORS)
           FAIL=0
           [ -s custom.txt ]        && FAIL=1
           [ -s positive-missing.txt ] && FAIL=1
 
           if [ "$FAIL" -ne 0 ]; then
-            echo "💥 BUILD FAILED – tutorial is not secure (vulnerabilities and/or not secure-by-default)."
+            echo "💥 BUILD FAILED – vulnerabilities or missing secure-by-default patterns."
             exit 1
           else
-            echo "🎉 BUILD PASSED – no vulnerabilities and secure-by-default (all positive patterns present)."
+            echo "✅ BUILD PASSED – no vulnerabilities and all secure-by-default patterns present."
           fi
