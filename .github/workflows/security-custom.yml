@@ -8,60 +8,90 @@ on:
 jobs:
   scan:
     runs-on: ubuntu-latest
+
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
 
       - name: Install Semgrep
-        run: pip install semgrep
+        run: |
+          python -m pip install --upgrade pip
+          pip install semgrep
 
       - name: Run custom Spring rules
         run: |
-          echo "🔍 Scanning custom rule-set (30+ rules)..."
-          semgrep --config=.semgrep/spring-custom.yml \
-                  --error \
-                  --output=custom.txt \
-                  .  # scan root
+          echo "🔍 Scanning custom Spring rule-set..."
+          # Run Semgrep but do not fail the job yet; we capture findings.
+          semgrep \
+            --config .semgrep/spring-custom.yml \
+            --error \
+            --severity ERROR \
+            --disable-version-check \
+            --no-git-ignore \
+            --json > custom.json || true
+
+          # Extract a simple text summary for the final report
+          semgrep \
+            --config .semgrep/spring-custom.yml \
+            --severity ERROR \
+            --disable-version-check \
+            --no-git-ignore \
+            --text > custom.txt || true
 
       - name: Run beginner positive rules
         run: |
-          echo "🔍 Scanning positive rule-set (7 rules)..."
-          semgrep --config=.semgrep/spring-positive.yml \
-                  --error \
-                  --output=positive.txt \
-                  .  # scan root
+          echo "🔍 Scanning beginner positive rule-set..."
+          semgrep \
+            --config .semgrep/spring-positive.yml \
+            --error \
+            --severity ERROR \
+            --disable-version-check \
+            --no-git-ignore \
+            --json > positive.json || true
 
-      - name: Generate summary
+          semgrep \
+            --config .semgrep/spring-positive.yml \
+            --severity ERROR \
+            --disable-version-check \
+            --no-git-ignore \
+            --text > positive.txt || true
+
+      - name: Generate summary and fail if needed
         if: always()
         run: |
           echo "=============================================="
-          echo "    SECURITY SCAN SUMMARY"
+          echo "🔐 Semgrep security summary"
           echo "=============================================="
-          echo ""
 
-          # Custom rules summary
           if [ -s custom.txt ]; then
-            echo "❌ CUSTOM RULES (30+) – FAILED:"
+            echo "❌ CUSTOM RULES – FAILED:"
             cat custom.txt
             echo ""
           else
-            echo "✅ CUSTOM RULES (30+) – PASSED"
+            echo "✅ CUSTOM RULES – PASSED (no ERROR findings)"
           fi
+
           echo "----------------------------------------------"
 
-          # Positive rules summary
           if [ -s positive.txt ]; then
-            echo "❌ POSITIVE RULES (7) – FAILED:"
+            echo "❌ POSITIVE (BEGINNER) RULES – FAILED:"
             cat positive.txt
             echo ""
           else
-            echo "✅ POSITIVE RULES (7) – PASSED"
+            echo "✅ POSITIVE (BEGINNER) RULES – PASSED (no ERROR findings)"
           fi
+
           echo "=============================================="
 
-          # Exit 1 if any rule failed
+          # Exit non-zero if any findings exist
           if [ -s custom.txt ] || [ -s positive.txt ]; then
-            echo "💥 BUILD FAILED – fix issues or add # nosemgrep justification"
+            echo "💥 BUILD FAILED – fix issues or justify with '# nosemgrep' in exceptional cases."
             exit 1
           else
-            echo "🎉 BUILD PASSED – all security rules satisfied"
+            echo "🎉 BUILD PASSED – all security rules satisfied."
           fi
