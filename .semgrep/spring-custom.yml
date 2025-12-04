@@ -1,67 +1,234 @@
-name: Security-Full-Summary
+rules:
+  # A01: Broken Access Control
+  - id: SPRING-A01-001-missing-method-authz
+    pattern: |
+      @GetMapping("/admin/$PATH")
+      public $RETYPE $METHOD(...) {
+        ...
+      }
+    message: "A01-001: Admin endpoint without @PreAuthorize"
+    severity: ERROR
+    languages: [java]
 
-on:
-  push:
-    branches: [ main, develop ]
-  pull_request:
+  - id: SPRING-A01-002-generic-request-mapping
+    pattern: |
+      @RequestMapping("$PATH")
+    message: "A01-002: Use @GetMapping/@PostMapping"
+    severity: ERROR
+    languages: [java]
 
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
+  - id: SPRING-A01-003-path-traversal
+    pattern: |
+      new ClassPathResource("..." + $VAR)
+    message: "A01-003: Path traversal via ClassPathResource"
+    severity: ERROR
+    languages: [java]
 
-      - name: Install Semgrep
-        run: pip install semgrep
+  - id: SPRING-A01-004-idor
+    pattern: |
+      $RET = $REPO.findById($ID);
+    message: "A01-004: IDOR – check ownership"
+    severity: ERROR
+    languages: [java]
 
-      - name: Run custom Spring rules
-        run: |
-          echo "🔍 Scanning custom rule-set (30+ rules)..."
-          semgrep --config=.semgrep/spring-custom.yml \
-                  --error \
-                  --output=custom.txt \
-                  .  # scan root
+  - id: SPRING-A01-006-csrf-disabled
+    pattern: |
+      .csrf().disable()
+    message: "A01-006: CSRF disabled"
+    severity: ERROR
+    languages: [java]
 
-      - name: Run beginner positive rules
-        run: |
-          echo "🔍 Scanning positive rule-set (7 rules)..."
-          semgrep --config=.semgrep/spring-positive.yml \
-                  --error \
-                  --output=positive.txt \
-                  .  # scan root
+  # A02: Cryptographic Failures
+  - id: SPRING-A02-001-jasypt
+    pattern-regex: 'jasypt\.encryptor\.password\s*=.+'
+    message: "A02-001: Hard-coded Jasypt password"
+    severity: ERROR
+    languages: [generic]
+    paths:
+      include: ["*.properties", "*.yml", "*.yaml"]
 
-      - name: Generate summary
-        if: always()
-        run: |
-          echo "=============================================="
-          echo "    SECURITY SCAN SUMMARY"
-          echo "=============================================="
-          echo ""
+  - id: SPRING-A02-002-noop-encoder
+    pattern: |
+      NoOpPasswordEncoder.getInstance()
+    message: "A02-002: Weak password encoder"
+    severity: ERROR
+    languages: [java]
 
-          # Custom rules summary
-          if [ -s custom.txt ]; then
-            echo "❌ CUSTOM RULES (30+) – FAILED:"
-            cat custom.txt
-            echo ""
-          else
-            echo "✅ CUSTOM RULES (30+) – PASSED"
-          fi
-          echo "----------------------------------------------"
+  - id: SPRING-A02-003-jwt-hard
+    pattern: |
+      signWith(..., "$SECRET")
+    message: "A02-003: Hard-coded JWT secret"
+    severity: ERROR
+    languages: [java]
 
-          # Positive rules summary
-          if [ -s positive.txt ]; then
-            echo "❌ POSITIVE RULES (7) – FAILED:"
-            cat positive.txt
-            echo ""
-          else
-            echo "✅ POSITIVE RULES (7) – PASSED"
-          fi
-          echo "=============================================="
+  - id: SPRING-A02-004-insecure-random
+    pattern-either:
+      - pattern: new Random().nextInt(...)
+      - pattern: Math.random()
+    message: "A02-004: Insecure random"
+    severity: ERROR
+    languages: [java]
 
-          # Exit 1 if any rule failed
-          if [ -s custom.txt ] || [ -s positive.txt ]; then
-            echo "💥 BUILD FAILED – fix issues or add # nosemgrep justification"
-            exit 1
-          else
-            echo "🎉 BUILD PASSED – all security rules satisfied"
-          fi
+  - id: SPRING-A02-006-hard-secret-prop
+    pattern-regex: '^(api\.key|db\.password|secret)\s*=.+'
+    message: "A02-006: Hard-coded secret"
+    severity: ERROR
+    languages: [generic]
+    paths:
+      include: ["*.properties", "*.yml", "*.yaml"]
+
+  - id: SPRING-A02-008-ssl-disabled
+    pattern-regex: 'server\.ssl\.enabled\s*=\s*false'
+    message: "A02-008: SSL disabled in prod"
+    severity: ERROR
+    languages: [generic]
+    paths:
+      include: ["*.properties", "*.yml", "*.yaml"]
+
+  # A03: Injection
+  - id: SPRING-A03-001-sql-concat
+    pattern: |
+      @Query("..." + $VAR)
+    message: "A03-001: SQL string concatenation"
+    severity: ERROR
+    languages: [java]
+
+  - id: SPRING-A03-006-reflected-xss
+    pattern-either:
+      - pattern: |
+          @GetMapping($PATH)
+          public String $METHOD(@RequestParam String $X) {
+            ...
+            return $X;
+          }
+      - pattern: |
+          @GetMapping($PATH)
+          public String $METHOD(@PathVariable String $X, Model model) {
+            ...
+            model.addAttribute("...", $X);
+            return "...";
+          }
+    message: "A03-006: Reflected XSS"
+    severity: ERROR
+    languages: [java]
+
+  - id: SPRING-A03-008-no-sri
+    pattern-regex: '<script\s+src\s*=\s*"https?://[^"]*"(?![^>]*integrity)>'
+    message: "A03-008: External script without SRI"
+    severity: ERROR
+    languages: [html]
+
+  # A04: Insecure Design
+  - id: SPRING-A04-004-hard-default-config
+    pattern: |
+      private String $F = "...";
+    message: "A04-004: Hard default in config"
+    severity: ERROR
+    languages: [java]
+
+  - id: SPRING-A04-005-no-pagination
+    pattern: |
+      repository.findAll()
+    message: "A04-005: No pagination"
+    severity: ERROR
+    languages: [java]
+
+  - id: SPRING-A04-006-debug-in-prod
+    pattern-regex: 'spring\.profiles\.active\s*=\s*debug|management\.endpoints\.web\.exposure\.include\s*=\s*\*'
+    message: "A04-006: Debug/actuator exposed"
+    severity: ERROR
+    languages: [generic]
+    paths:
+      include: ["*.properties", "*.yml", "*.yaml"]
+
+  # A05: Security Misconfiguration
+  - id: SPRING-A05-001-cors-wildcard
+    pattern: |
+      .allowedOrigins("*")
+    message: "A05-001: CORS wildcard"
+    severity: ERROR
+    languages: [java]
+
+  - id: SPRING-A05-004-cookie-no-flags
+    pattern: |
+      new Cookie($ARGS);
+    message: "A05-004: Cookie without flags"
+    severity: ERROR
+    languages: [java]
+
+  - id: SPRING-A05-005-no-csp
+    pattern: |
+      http.headers()(?!.*contentSecurityPolicy)
+    message: "A05-005: Missing CSP header"
+    severity: ERROR
+    languages: [java]
+
+  # A06: Vulnerable Components
+  - id: SPRING-A06-001-old-parent-pom
+    pattern-regex: 'spring-boot-starter-parent.*2\.[0-3]\.'
+    message: "A06-001: Parent POM with CVEs"
+    severity: ERROR
+    languages: [xml]
+    paths:
+      include: ["pom.xml"]
+
+  - id: SPRING-A06-002-old-jackson
+    pattern-regex: 'jackson-databind.*2\.9\.'
+    message: "A06-002: Jackson with CVEs"
+    severity: ERROR
+    languages: [xml]
+    paths:
+      include: ["pom.xml"]
+
+  # A07: Auth Failures
+  - id: SPRING-A07-006-no-lockout
+    pattern: |
+      login(...) { }
+    message: "A07-006: No brute-force lockout"
+    severity: ERROR
+    languages: [java]
+
+  # A08: Integrity
+  - id: SPRING-A08-001-insecure-deserialization
+    pattern: |
+      objectMapper.readValue(..., Object.class)
+    message: "A08-001: Insecure Jackson deserialization"
+    severity: ERROR
+    languages: [java]
+
+  # A09: Logging
+  - id: SPRING-A09-001-clear-password-log
+    pattern: |
+      log.(info|debug|error)(..., password, ...)
+    message: "A09-001: Password in log"
+    severity: ERROR
+    languages: [java]
+
+  - id: SPRING-A09-002-swallow-auth-exception
+    pattern: |
+      catch (AuthenticationException e) { }
+    message: "A09-002: Empty auth exception catch"
+    severity: ERROR
+    languages: [java]
+
+  - id: SPRING-A09-003-no-audit-log
+    pattern: |
+      @DeleteMapping("/admin/...")
+    message: "A09-003: Admin action without audit log"
+    severity: ERROR
+    languages: [java]
+
+  # A10: SSRF
+  - id: SPRING-A10-001-ssrf-rest-template
+    pattern: |
+      restTemplate.getForObject(userInput, String.class)
+    message: "A10-001: SSRF – validate URL"
+    severity: ERROR
+    languages: [java]
+
+  - id: SPRING-A10-006-trusted-x-forwarded-for
+    pattern: |
+      request.getHeader("X-Forwarded-For")
+    message: "A10-006: Trusting X-Forwarded-For"
+    severity: ERROR
+    languages: [java]
