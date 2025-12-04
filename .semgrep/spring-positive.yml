@@ -158,3 +158,34 @@ rules:
       - ".github/**"
       - "**/*.md"
   pattern-regex: '\.findByIdAnd(Owner|User)[A-Za-z0-9_]*\('
+
+
+# 8) XSS-safe output encoding (positive rule)
+- id: POS-xss-escaped-output
+  message: >-
+    User-controlled data is safely escaped or sanitized before being returned in a response.
+  severity: ERROR               
+  languages: [java]
+  paths:
+    include:
+      - "src/main/java/**"
+    exclude:
+      - ".semgrep/**"
+      - ".github/**"
+      - "**/*.md"
+
+  pattern-either:
+    # Spring's built-in escaping
+    - pattern: HtmlUtils.htmlEscape($INPUT)
+
+    # Apache Commons
+    - pattern: StringEscapeUtils.escapeHtml4($INPUT)
+
+    # OWASP Java Encoder
+    - pattern: Encode.forHtml($INPUT)
+
+    # Very common custom sanitizer names in tutorials
+    - pattern-regex: 'sanitize\('
+    - pattern-regex: 'escape(Html)?\('
+    - pattern-regex: 'clean(Html)?\('
+
