@@ -23,12 +23,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install semgrep
 
-      # ------------------------------------------------------------------
-      # 1.  CUSTOM  (real vulnerabilities)  –  severity ERROR
-      # ------------------------------------------------------------------
       - name: Run custom Spring rules
         run: |
           echo "🔍 Scanning custom Spring rule-set..."
+          # Run Semgrep but do not fail the job yet; we capture findings.
           semgrep \
             --config .semgrep/spring-custom.yml \
             --error \
@@ -37,6 +35,7 @@ jobs:
             --no-git-ignore \
             --json > custom.json || true
 
+          # Extract a simple text summary for the final report
           semgrep \
             --config .semgrep/spring-custom.yml \
             --severity ERROR \
@@ -44,31 +43,32 @@ jobs:
             --no-git-ignore \
             --text > custom.txt || true
 
-      # ------------------------------------------------------------------
-      # 2.  POSITIVE  (secure-by-default)  –  severity WARNING
-      # ------------------------------------------------------------------
       - name: Run beginner positive rules
         run: |
           echo "🔍 Scanning beginner positive rule-set (secure-by-default patterns)..."
+          # JSON output for coverage analysis
           semgrep \
             --config .semgrep/spring-positive.yml \
-            --severity WARNING \
+            --error \
+            --severity ERROR \
             --disable-version-check \
             --no-git-ignore \
             --json > positive.json || true
 
+          # Optional human-readable summary (not used for pass/fail)
           semgrep \
             --config .semgrep/spring-positive.yml \
-            --severity WARNING \
+            --severity ERROR \
             --disable-version-check \
             --no-git-ignore \
             --text > positive.txt || true
 
-          # Coverage counter (expects WARNING-level matches)
+          # Compute coverage of positive rules (how many "good" patterns are present)
           python - << 'EOF'
-          import json, re
+          import json
           from pathlib import Path
 
+          # These IDs are what Semgrep prints in logs (note the "semgrep." prefix)
           expected = {
               "semgrep.POS-escape-path-var",
               "semgrep.POS-request-mapping-method",
@@ -79,34 +79,38 @@ jobs:
               "semgrep.POS-idor-ownership",
           }
 
+          results = []
           try:
-              data = json.load(open("positive.json", encoding="utf-8"))
-              results = {r.get("check_id") for r in data.get("results", [])}
+              with open("positive.json", "r", encoding="utf-8") as f:
+                  data = json.load(f)
+                  results = data.get("results", [])
           except Exception:
-              results = set()
+              results = []
 
-          matched = expected & results
-          missing = sorted(expected - matched)
+          present = {r.get("check_id") for r in results}
+          matched = expected & present
+          missing = sorted(expected - present)
 
+          # Write a small coverage summary
           Path("positive-coverage.txt").write_text(
               f"{len(matched)}/{len(expected)} positive (secure-by-default) rules matched\n",
               encoding="utf-8",
           )
-          Path("positive-missing.txt").write_text("\n".join(missing) + "\n" if missing else "")
+
+          # Write missing rule IDs (if any) to a file
+          with open("positive-missing.txt", "w", encoding="utf-8") as f:
+              for mid in missing:
+                  f.write(mid + "\n")
           EOF
 
-      # ------------------------------------------------------------------
-      # 3.  SUMMARY  +  PASS / FAIL
-      # ------------------------------------------------------------------
       - name: Generate summary and fail if needed
         if: always()
-        shell: bash
         run: |
           echo "=============================================="
           echo "🔐 Semgrep security summary"
           echo "=============================================="
 
-          # ---------- 1.  CUSTOM  RULES  (ERROR only) ----------
+          # 1) Custom rules: vulnerabilities / bad patterns
           if [ -s custom.txt ]; then
             echo "❌ CUSTOM RULES – VULNERABILITIES FOUND:"
             cat custom.txt
@@ -117,16 +121,14 @@ jobs:
 
           echo "----------------------------------------------"
 
-          # ---------- 2.  POSITIVE  COVERAGE  (ERROR vs WARNING) ----------
-          echo "🔎 Secure-by-default coverage (beginner positive rules):"
+          # 2) Positive rules: secure-by-default coverage
+          if [ -f positive-coverage.txt ]; then
+            echo "🔎 Secure-by-default coverage (beginner positive rules):"
+            cat positive-coverage.txt
+          else
+            echo "⚠️ Could not compute positive rule coverage (missing positive-coverage.txt)."
+          fi
 
-          # split positive.txt into ERROR and WARNING lines
-          grep -E 'severity:(ERROR|error)' positive.txt > positive-ERROR.txt || true
-          grep -E 'severity:(WARNING|warning|INFO|info)' positive.txt > positive-WARN.txt || true
-
-          cat positive-coverage.txt
-
-          # list **missing** positive rules (ERROR level)
           if [ -s positive-missing.txt ]; then
             echo ""
             echo "❌ SECURE-BY-DEFAULT – FAILED"
@@ -139,21 +141,20 @@ jobs:
             echo "All 7 beginner positive rules are present at least once."
           fi
 
-          # ---------- 3.  WARNINGS  (do **not** fail the job) ----------
-          if [ -s positive-WARN.txt ]; then
-            echo ""
-            echo "⚠️  WARNINGS – best-practice hints (no fail):"
-            cat positive-WARN.txt
-            echo ""
-          fi
-
           echo "=============================================="
 
-          # ---------- 4.  PASS / FAIL  DECISION ----------
-          # fail only on **ERRORS** (custom **or** missing positive)
+          # 3) Decide overall pass/fail:
+          #    - Fail if any custom vulnerabilities are found
+          #    - OR if any positive rules are missing (not secure by default)
           FAIL=0
-          [ -s custom.txt ]        && FAIL=1
-          [ -s positive-missing.txt ] && FAIL=1
+
+          if [ -s custom.txt ]; then
+            FAIL=1
+          fi
+
+          if [ -s positive-missing.txt ]; then
+            FAIL=1
+          fi
 
           if [ "$FAIL" -ne 0 ]; then
             echo "💥 BUILD FAILED – tutorial is not secure (vulnerabilities and/or not secure-by-default)."
