@@ -1,4 +1,109 @@
-      - name: Generate summary and fail if needed
+name: Security-Full-Summary
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Install Semgrep
+        run: |
+          python -m pip install --upgrade pip
+          pip install semgrep
+
+      - name: Run custom Spring rules
+        run: |
+          echo "🔍 Scanning custom Spring rule-set..."
+          # Run Semgrep but do not fail the job yet; we capture findings.
+          semgrep \
+            --config .semgrep/spring-custom.yml \
+            --error \
+            --severity ERROR \
+            --disable-version-check \
+            --no-git-ignore \
+            --json > custom.json || true
+
+          # Extract a simple text summary for the final report
+          semgrep \
+            --config .semgrep/spring-custom.yml \
+            --severity ERROR \
+            --disable-version-check \
+            --no-git-ignore \
+            --text > custom.txt || true
+
+      - name: Run beginner positive rules
+        run: |
+          echo "🔍 Scanning beginner positive rule-set (secure-by-default patterns)..."
+          # JSON output for coverage analysis
+          semgrep \
+            --config .semgrep/spring-positive.yml \
+            --error \
+            --severity ERROR \
+            --disable-version-check \
+            --no-git-ignore \
+            --json > positive.json || true
+
+          # Optional human-readable summary (not used for pass/fail)
+          semgrep \
+            --config .semgrep/spring-positive.yml \
+            --severity ERROR \
+            --disable-version-check \
+            --no-git-ignore \
+            --text > positive.txt || true
+
+          # Compute coverage of positive rules (how many "good" patterns are present)
+          python - << 'EOF'
+          import json
+          from pathlib import Path
+
+          # These IDs are what Semgrep prints in logs (note the "semgrep." prefix)
+          expected = {
+              "semgrep.POS-escape-path-var",
+              "semgrep.POS-request-mapping-method",
+              "semgrep.POS-csrf-enabled",
+              "semgrep.POS-cookie-flags",
+              "semgrep.POS-no-hard-secret",
+              "semgrep.POS-admin-authz",
+              "semgrep.POS-idor-ownership",
+          }
+
+          results = []
+          try:
+              with open("positive.json", "r", encoding="utf-8") as f:
+                  data = json.load(f)
+                  results = data.get("results", [])
+          except Exception:
+              results = []
+
+          present = {r.get("check_id") for r in results}
+          matched = expected & present
+          missing = sorted(expected - present)
+
+          # Write a small coverage summary
+          Path("positive-coverage.txt").write_text(
+              f"{len(matched)}/{len(expected)} positive (secure-by-default) rules matched\n",
+              encoding="utf-8",
+          )
+
+          # Write missing rule IDs (if any) to a file
+          with open("positive-missing.txt", "w", encoding="utf-8") as f:
+              for mid in missing:
+                  f.write(mid + "\n")
+          EOF
+
+            - name: Generate summary and fail if needed
         if: always()
         shell: bash
         run: |
