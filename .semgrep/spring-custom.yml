@@ -51,7 +51,12 @@ rules:
       jasypt.encryptor.password=...
     message: "A02-001: Hard-coded Jasypt password – use vault/KMS"
     severity: ERROR
-    languages: [java, properties]
+    languages: [generic]
+    paths:
+      include:
+        - "*.properties"
+        - "*.yml"
+        - "*.yaml"
 
   - id: SPRING-A02-002-noop-password-encoder
     pattern: |
@@ -86,14 +91,24 @@ rules:
     pattern-regex: '^(api\.key|db\.password|secret)\s*=.+'
     message: "A02-006: Hard-coded secret in config – externalise"
     severity: ERROR
-    languages: [properties, yaml]
+    languages: [generic]
+    paths:
+      include:
+        - "*.properties"
+        - "*.yml"
+        - "*.yaml"
 
   - id: SPRING-A02-008-ssl-disabled
     pattern: |
       server.ssl.enabled=false
     message: "A02-008: SSL disabled in prod – enable and configure"
     severity: ERROR
-    languages: [properties, yaml]
+    languages: [generic]
+    paths:
+      include:
+        - "*.properties"
+        - "*.yml"
+        - "*.yaml"
 
   # ---------- A03  Injection ----------
   - id: SPRING-A03-001-sql-concat
@@ -198,7 +213,12 @@ rules:
     pattern-regex: 'spring\.profiles\.active\s*=\s*debug|management\.endpoints\.web\.exposure\.include\s*=\s*\*'
     message: "A04-006: Debug/actuator fully exposed in prod – restrict to health,info"
     severity: ERROR
-    languages: [properties, yaml]
+    languages: [generic]
+    paths:
+      include:
+        - "*.properties"
+        - "*.yml"
+        - "*.yaml"
 
   # ---------- A05  Security Misconfiguration ----------
   - id: SPRING-A05-001-cors-wildcard
@@ -212,7 +232,12 @@ rules:
     pattern-regex: 'management\.endpoints\.web\.exposure\.include\s*=\s*\*'
     message: "A05-002: All actuators exposed – limit to health,info"
     severity: ERROR
-    languages: [properties, yaml]
+    languages: [generic]
+    paths:
+      include:
+        - "*.properties"
+        - "*.yml"
+        - "*.yaml"
 
   - id: SPRING-A05-003-session-fixation-none
     pattern: |
@@ -356,7 +381,7 @@ rules:
     pattern-regex: 'RUN\s+wget\s+https?://[^#\n]*(?!\n.*sha256sum)'
     message: "A08-005: Dockerfile wget without checksum – add sha256sum -c"
     severity: ERROR
-    languages: [dockerfile]
+    languages: [docker]
 
   # ---------- A09  Logging ----------
   - id: SPRING-A09-001-clear-password-log
