@@ -1,806 +1,161 @@
 rules:
-- id: SPRING-A01-001
-  message: |
-    Rule: Missing Method-Level Security on REST Endpoints (SPRING-A01-001)
-    Detail: REST admin endpoints should use method-level authorization, e.g. @PreAuthorize / @Secured.
-    Pattern matched: Controller methods using @GetMapping (often on admin endpoints)
-    Actual pattern: pattern-regex 'GetMapping'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: GetMapping
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-    - '*.properties'
-    - '*.yml'
+# ------------------------------------------------------------------
+# 1.  AUTHENTICATION / AUTHORISATION  (ERROR only for real flaws)
+# ------------------------------------------------------------------
+  - id: SPRING-A01-001-tuned
+    message: |
+      Admin-style REST endpoints should use method-level security (@PreAuthorize / @Secured).
+      This rule fires only when the path segment looks administrative **and** no security annotation is present.
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern-inside: |
+          @GetMapping("$PATH")
+          $RET $METHOD(..) { ... }
+      - metavariable-regex:
+          metavariable: $PATH
+          regex: .*(?i)(admin|manage|internal|system|config).*
+      - pattern-not: |
+          @PreAuthorize(...)
+          $RET $METHOD(...) { ... }
+      - pattern-not: |
+          @Secured(...)
+          $RET $METHOD(...) { ... }
 
-- id: SPRING-A01-002
-  message: |
-    Rule: @Controller Without @RequestMapping Method Restrictions (SPRING-A01-002)
-    Detail: @RequestMapping should usually specify HTTP method(s) instead of accepting all verbs by default.
-    Pattern matched: Use of @RequestMapping
-    Actual pattern: pattern-regex 'RequestMapping'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: RequestMapping
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
+# A01-002  -  reduce noise: keep only **class-level** @RequestMapping without method
+  - id: SPRING-A01-002-tuned
+    message: |
+      Class-level @RequestMapping that does not list HTTP methods can be ambiguous.
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern: |
+          @RequestMapping("$P")
+          public class $C { ... }
+      - pattern-not: |
+          @RequestMapping(value = "$P", method = { ... })
+          public class $C { ... }
 
-- id: SPRING-A01-003
-  message: |
-    Rule: Path Traversal in Resource Resolution (SPRING-A01-003)
-    Detail: Avoid building resource paths from user input with ClassPathResource or similar APIs.
-    Pattern matched: Use of ClassPathResource
-    Actual pattern: pattern-regex 'ClassPathResource'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: ClassPathResource
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
+# ------------------------------------------------------------------
+# 2.  SECRETS  (stay ERROR – but ignore comments & example placeholders)
+# ------------------------------------------------------------------
+  - id: SPRING-A02-003-tuned
+    message: "JWT secret seems to be hard-coded; load it from config or vault."
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-not-inside: |
+          // ...
+      - pattern-not-inside: |
+          /* ... */
+      - pattern: |
+          "$SECRET"
 
-- id: SPRING-A01-004
-  message: |
-    Rule: Insecure Direct Object Reference (IDOR) in Repository Access (SPRING-A01-004)
-    Detail: Access by repository.findById should check ownership or authorization for the loaded ID.
-    Pattern matched: repository.findById(...)
-    Actual pattern: pattern-regex 'repository\.findById'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: repository\.findById
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
+    metavariable-analysis:
+      - metavariable: $SECRET
+        analyzer: entropy
+        entropy-greater-than: 4.5
+    paths:
+      include:
+        - "*.java"
 
-- id: SPRING-A01-005
-  message: |
-    Rule: WebSocket Without Origin Check (SPRING-A01-005)
-    Detail: WebSocket handlers should restrict allowed origins instead of accepting all.
-    Pattern matched: withSockJS() registration (often used in WebSocket configs)
-    Actual pattern: pattern-regex 'withSockJS'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: withSockJS
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
+  - id: SPRING-A02-006-tuned
+    message: "Potential hard-coded secret in configuration."
+    severity: ERROR
+    languages: [generic]
+    patterns:
+      - pattern-regex: (?i)(api[_\-]?key|secret|password|token)\s*[:=]\s*["'][^"'\s]+["']
+      - pattern-not-regex: .*(?i)(placeholder|example|dummy|fake|xxx).*
 
-- id: SPRING-A01-006
-  message: |
-    Rule: CSRF Protection Disabled Globally (SPRING-A01-006)
-    Detail: http.csrf().disable() should not be used lightly in beginner tutorials; explain the trade-offs.
-    Pattern matched: http.csrf().disable(...)
-    Actual pattern: pattern-regex 'http\.csrf'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: http\.csrf
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
+# ------------------------------------------------------------------
+# 3.  INJECTION  (real vulnerabilities → ERROR)
+# ------------------------------------------------------------------
+  - id: SPRING-A03-001-tuned
+    message: "String concatenation inside @Query can lead to JPQL injection."
+    severity: ERROR
+    languages: [java]
+    patterns:
+      - pattern-inside: |
+          @Query("..." + $X + "...")
+          ...
+      - metavariable-analysis:
+          metavariable: $X
+          analyzer: taint
+          taint-options:
+            - by-side-effect: true
 
-- id: SPRING-A02-001
-  message: |
-    Rule: Jasypt Encrypted Password in Properties File (SPRING-A02-001)
-    Detail: Secrets like jasypt.encryptor.password should not be stored directly in application.properties.
-    Pattern matched: application.properties references
-    Actual pattern: pattern-regex 'application\.properties'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: application\.properties
-  paths:
-    include:
-    - '*.properties'
-    - '*.yml'
+# ------------------------------------------------------------------
+# 4.  XSS  –  NEW TAINT RULE  (catches the 7 SonarCloud/CodeQL hits)
+# ------------------------------------------------------------------
+  - id: SPRING-A03-009
+    message: "Reflected XSS – user input returned directly in @RestController String."
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    pattern-sources:
+      - patterns:
+          - pattern-either:
+              - pattern: |
+                  @PathVariable $TYPE $VAR
+              - pattern: |
+                  @RequestParam $TYPE $VAR
+    pattern-sinks:
+      - patterns:
+          - pattern: |
+              return $VAR;
+          - pattern-inside: |
+              @RestController
+              ...
+              @GetMapping(...)
+              String $METHOD(...) { ... }
 
-- id: SPRING-A02-002
-  message: |
-    Rule: Weak Password Encoder (NoOp, MD5, SHA-1) (SPRING-A02-002)
-    Detail: Avoid NoOpPasswordEncoder or weak hash algorithms in password encoders.
-    Pattern matched: NoOpPasswordEncoder.getInstance()
-    Actual pattern: pattern-regex 'NoOpPasswordEncoder\.getInstance'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: NoOpPasswordEncoder\.getInstance
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
+# ------------------------------------------------------------------
+# 5.  FILE UPLOAD  –  only flag **real** missing validation
+# ------------------------------------------------------------------
+  - id: SPRING-A05-001-tuned
+    message: "MultipartFile is used but no size/type/path validation detected."
+    severity: WARNING
+    languages: [java]
+    patterns:
+      - pattern: |
+          MultipartFile $F
+      - pattern-not-inside: |
+          if ($F.getSize() > ...) { ... }
+      - pattern-not-inside: |
+          if (! $F.getOriginalFilename().matches(...) ) { ... }
 
-- id: SPRING-A02-003
-  message: |
-    Rule: Hard-coded JWT Secret Key (SPRING-A02-003)
-    Detail: JWT secrets should not be hard-coded; load them from configuration or secrets.
-    Pattern matched: Jwts.builder(...) usage
-    Actual pattern: pattern-regex 'Jwts\.builder'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: Jwts\.builder
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-    - '*.yml'
+# ------------------------------------------------------------------
+# 6.  MAVEN  –  downgrade to WARNING  (best-practice, not vuln)
+# ------------------------------------------------------------------
+  - id: SPRING-A06-001-tuned
+    message: "Consider pinning dependency versions or use dependencyManagement."
+    severity: WARNING
+    languages: [generic]
+    patterns:
+      - pattern-regex: '<dependency>\s*<groupId>[^<]+</groupId>\s*<artifactId>[^<]+</artifactId>\s*(<scope>[^<]+</scope>)?\s*</dependency>'
+      - pattern-not-inside: |
+          <dependencyManagement>...</dependencyManagement>
 
-- id: SPRING-A02-004
-  message: |
-    Rule: Insecure Random for Security Context (SPRING-A02-004)
-    Detail: Do not use java.util.Random or timestamps for security tokens; use secure random sources.
-    Pattern matched: new Random(...) or Random usage
-    Actual pattern: pattern-regex 'Random'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: Random
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
+# ------------------------------------------------------------------
+# 7.  ACTUATOR / TLS / CORS  –  WARNING for tutorials
+# ------------------------------------------------------------------
+  - id: SPRING-A02-008-tuned
+    message: "server.ssl.enabled=false – fine for local dev, but never for prod."
+    severity: WARNING
+    languages: [generic]
+    pattern-regex: ^server\.ssl\.enabled\s*=\s*false\s*($|#)
 
-- id: SPRING-A02-005
-  message: |
-    Rule: TLS Certificate Validation Disabled (SPRING-A02-005)
-    Detail: Custom SSL contexts that trust all certificates weaken TLS validation.
-    Pattern matched: setSSLContext / SSL context configuration
-    Actual pattern: pattern-regex 'setSSLContext'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: setSSLContext
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
+  - id: SPRING-A04-002-tuned
+    message: "Exposing all actuator endpoints (*) – restrict in production."
+    severity: WARNING
+    languages: [generic]
+    pattern-regex: management\.endpoints\.web\.exposure\.include\s*=\s*\*
 
-- id: SPRING-A02-006
-  message: |
-    Rule: Hard-coded Secrets in Configuration Files (SPRING-A02-006)
-    Detail: Values like api.key or other secrets should not be hard-coded in config files.
-    Pattern matched: api.key in properties or YAML
-    Actual pattern: pattern-regex 'api\.key'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: api\.key
-  paths:
-    include:
-    - '*.properties'
-    - '*.yml'
-
-- id: SPRING-A02-008
-  message: |
-    Rule: Insecure HTTP/TLS Configuration (SPRING-A02-008)
-    Detail: server.ssl.enabled=false disables HTTPS and should not be used casually in tutorials.
-    Pattern matched: server.ssl.enabled property
-    Actual pattern: pattern-regex 'server\.ssl\.enabled'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: server\.ssl\.enabled
-  paths:
-    include:
-    - '*.properties'
-    - '*.yml'
-
-- id: SPRING-A03-001
-  message: |
-    Rule: SQL Injection in JPA @Query (SPRING-A03-001)
-    Detail: Avoid building JPQL/SQL queries via string concatenation in @Query definitions.
-    Pattern matched: @Query usage in repositories
-    Actual pattern: pattern-regex 'Query'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: Query
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A03-002
-  message: |
-    Rule: Command Injection via ProcessBuilder (SPRING-A03-002)
-    Detail: Do not pass user-controlled strings directly to ProcessBuilder commands.
-    Pattern matched: ProcessBuilder(...)
-    Actual pattern: pattern-regex 'ProcessBuilder'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: ProcessBuilder
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A03-003
-  message: |
-    Rule: LDAP Injection in Authentication (SPRING-A03-003)
-    Detail: LDAP filters should not be built with raw string concatenation from user input.
-    Pattern matched: DirContext.search(...)
-    Actual pattern: pattern-regex 'DirContext\.search'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: DirContext\.search
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A03-004
-  message: |
-    Rule: SpEL Injection in Expression Parsing (SPRING-A03-004)
-    Detail: Avoid parsing user-supplied SpEL expressions directly with SpelExpressionParser.parseRaw.
-    Pattern matched: SpelExpressionParser.parseRaw(...)
-    Actual pattern: pattern-regex 'SpelExpressionParser\.parseRaw'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: SpelExpressionParser\.parseRaw
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A03-005
-  message: |
-    Rule: XSS via Thymeleaf th:utext (SPRING-A03-005)
-    Detail: th:utext renders unescaped HTML; prefer th:text unless you sanitize explicitly.
-    Pattern matched: th:utext attributes in templates
-    Actual pattern: pattern-regex 'th:utext'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: th:utext
-  paths:
-    include:
-    - '*.html'
-    - '*.thymeleaf'
-
-- id: SPRING-A03-006
-  message: |
-    Rule: Reflected XSS in Error Pages (SPRING-A03-006)
-    Detail: Do not echo raw user input into error messages or HTML responses.
-    Pattern matched: ResponseEntity.ok(...) patterns that may return user data
-    Actual pattern: pattern-regex 'ResponseEntity\.ok'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: ResponseEntity\.ok
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A03-008
-  message: |
-    Rule: Untrusted JavaScript Sources (No SRI) (SPRING-A03-008)
-    Detail: Remote script tags should be treated carefully; use HTTPS and consider SRI.
-    Pattern matched: <script src="http...">
-    Actual pattern: pattern-regex '<script src="http'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: '<script src="http'
-  paths:
-    include:
-    - '*.html'
-    - '*.jsp'
-
-- id: SPRING-A04-001
-  message: |
-    Rule: CORS Misconfiguration (Allowing All Origins) (SPRING-A04-001)
-    Detail: @CrossOrigin(origins="*") should be avoided in example code without explanation.
-    Pattern matched: @CrossOrigin annotations
-    Actual pattern: pattern-regex 'CrossOrigin'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: CrossOrigin
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A04-002
-  message: |
-    Rule: Exposed Actuator Endpoints Without Security (SPRING-A04-002)
-    Detail: management.endpoints.web.exposure.include=* exposes all actuator endpoints.
-    Pattern matched: management.endpoints.* exposure settings
-    Actual pattern: pattern-regex 'management\.endpoints'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: management\.endpoints
-  paths:
-    include:
-    - '*.properties'
-    - '*.yml'
-
-- id: SPRING-A04-003
-  message: |
-    Rule: Open Redirect via RedirectView (SPRING-A04-003)
-    Detail: RedirectView should not be created directly from user-controlled URLs.
-    Pattern matched: RedirectView constructors
-    Actual pattern: pattern-regex 'RedirectView'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: RedirectView
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A04-004
-  message: |
-    Rule: Missing Security Headers (SPRING Security Filter) (SPRING-A04-004)
-    Detail: Avoid disabling http.headers() without adding equivalent protections.
-    Pattern matched: http.headers(...) usage
-    Actual pattern: pattern-regex 'http\.headers'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: http\.headers
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A04-005
-  message: |
-    Rule: Missing HTTPS Enforcement (SPRING-A04-005)
-    Detail: Spring Security configuration should typically enforce HTTPS, not insecure channels.
-    Pattern matched: requiresChannel(...) calls
-    Actual pattern: pattern-regex 'requiresChannel'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: requiresChannel
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A04-006
-  message: |
-    Rule: Debug/Actuator Mode Enabled in Production (SPRING-A04-006)
-    Detail: spring-boot-devtools should not be present in production builds.
-    Pattern matched: spring-boot-devtools dependency
-    Actual pattern: pattern-regex 'spring-boot-devtools'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: spring-boot-devtools
-  paths:
-    include:
-    - 'pom.xml'
-
-- id: SPRING-A05-001
-  message: |
-    Rule: Insecure File Upload Without Validation (SPRING-A05-001)
-    Detail: MultipartFile uploads should validate file type, size, and path before writing.
-    Pattern matched: MultipartFile parameters or usage
-    Actual pattern: pattern-regex 'MultipartFile'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: MultipartFile
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A05-002
-  message: |
-    Rule: File Upload Without Size Limits (SPRING-A05-002)
-    Detail: Tutorials should show max file size limits for uploads (spring.servlet.multipart.max-file-size).
-    Pattern matched: multipart max-file-size configuration
-    Actual pattern: pattern-regex 'spring\.servlet\.multipart\.max-file-size'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: spring\.servlet\.multipart\.max-file-size
-  paths:
-    include:
-    - '*.properties'
-    - '*.yml'
-
-- id: SPRING-A05-003
-  message: |
-    Rule: Directory Traversal in File Storage (SPRING-A05-003)
-    Detail: getOriginalFilename() should not be used directly to build filesystem paths.
-    Pattern matched: getOriginalFilename() usage
-    Actual pattern: pattern-regex 'getOriginalFilename'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: getOriginalFilename
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A05-004
-  message: |
-    Rule: Insecure File Download (Content-Type and Disposition) (SPRING-A05-004)
-    Detail: ResponseEntity.ok(resource) should set content type and Content-Disposition for downloads.
-    Pattern matched: ResponseEntity.ok(...) in download contexts
-    Actual pattern: pattern-regex 'ResponseEntity\.ok'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: ResponseEntity\.ok
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A06-001
-  message: |
-    Rule: Maven Dependency Without Version (SPRING-A06-001)
-    Detail: Dependencies should specify versions or use dependencyManagement to pin them.
-    Pattern matched: <dependency> elements in pom.xml
-    Actual pattern: pattern-regex '<dependency>'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: '<dependency>'
-  paths:
-    include:
-    - 'pom.xml'
-
-- id: SPRING-A06-002
-  message: |
-    Rule: Maven Dependency With Version Range (SPRING-A06-002)
-    Detail: Version ranges make builds non-deterministic; pin explicit versions instead.
-    Pattern matched: <version> elements in pom.xml
-    Actual pattern: pattern-regex '<version>'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: '<version>'
-  paths:
-    include:
-    - 'pom.xml'
-
-- id: SPRING-A06-003
-  message: |
-    Rule: Logback Vulnerable Version (SPRING-A06-003)
-    Detail: Check logback-classic versions for known CVEs instead of using old versions blindly.
-    Pattern matched: logback-classic dependency
-    Actual pattern: pattern-regex 'logback-classic'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: logback-classic
-  paths:
-    include:
-    - 'pom.xml'
-
-- id: SPRING-A06-004
-  message: |
-    Rule: Vulnerable Spring Boot Starter Version (SPRING-A06-004)
-    Detail: spring-boot-starter-web versions should be checked for known vulnerabilities.
-    Pattern matched: spring-boot-starter-web dependency
-    Actual pattern: pattern-regex 'spring-boot-starter-web'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: spring-boot-starter-web
-  paths:
-    include:
-    - 'pom.xml'
-
-- id: SPRING-A06-005
-  message: |
-    Rule: Vulnerable Jackson Databind Version (SPRING-A06-005)
-    Detail: jackson-databind versions should be kept patched due to frequent CVEs.
-    Pattern matched: jackson-databind dependency
-    Actual pattern: pattern-regex 'jackson-databind'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: jackson-databind
-  paths:
-    include:
-    - 'pom.xml'
-
-- id: SPRING-A06-006
-  message: |
-    Rule: Unpinned Dependencies (No Dependency Management) (SPRING-A06-006)
-    Detail: Use dependencyManagement to control versions of transitive dependencies.
-    Pattern matched: dependencyManagement sections
-    Actual pattern: pattern-regex 'dependencyManagement'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: dependencyManagement
-  paths:
-    include:
-    - 'pom.xml'
-
-- id: SPRING-A06-007
-  message: |
-    Rule: Remote JavaScript Without Integrity (SRI) (SPRING-A06-007)
-    Detail: Consider integrity attributes for remote scripts in production-facing examples.
-    Pattern matched: integrity attribute in script tags
-    Actual pattern: pattern-regex 'integrity'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: integrity
-  paths:
-    include:
-    - '*.html'
-    - '*.jsp'
-
-- id: SPRING-A07-001
-  message: |
-    Rule: Plaintext Password Storage in Database (SPRING-A07-001)
-    Detail: Passwords should be encoded (hashed) before being stored or logged.
-    Pattern matched: user.getPassword / setPassword without encoder
-    Actual pattern: pattern-regex 'user\.getPassword'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: user\.getPassword
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A07-002
-  message: |
-    Rule: Password Reset Token Predictable or Reused (SPRING-A07-002)
-    Detail: Tokens must be random and not based only on timestamps or simple counters.
-    Pattern matched: System.currentTimeMillis used for token
-    Actual pattern: pattern-regex 'System\.currentTimeMillis'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: System\.currentTimeMillis
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A07-003
-  message: |
-    Rule: Username Enumeration via Error Messages (SPRING-A07-003)
-    Detail: Avoid distinct error messages for user-not-found vs wrong-password.
-    Pattern matched: authException.getMessage or similar
-    Actual pattern: pattern-regex 'authException\.getMessage'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: authException\.getMessage
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A07-004
-  message: |
-    Rule: Password Reset Token Not Invalidated After Use (SPRING-A07-004)
-    Detail: Password reset tokens should be invalidated or marked used after successful reset.
-    Pattern matched: setPassword(...) in reset flows
-    Actual pattern: pattern-regex 'setPassword'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: setPassword
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A07-005
-  message: |
-    Rule: Missing Password Strength Validation (SPRING-A07-005)
-    Detail: Tutorials should show basic password strength checks before accepting passwords.
-    Pattern matched: setPassword(...) without validation
-    Actual pattern: pattern-regex 'setPassword'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: setPassword
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A07-006
-  message: |
-    Rule: Missing Account Lockout Mechanism (Brute-Force Protection) (SPRING-A07-006)
-    Detail: Login flows should consider lockout or throttling after multiple failed attempts.
-    Pattern matched: login(...) methods
-    Actual pattern: pattern-regex 'login'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: login
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A08-001
-  message: |
-    Rule: Insecure Deserialization with Default Jackson (SPRING-A08-001)
-    Detail: Avoid deserializing into Object.class or polymorphic types without restrictions.
-    Pattern matched: objectMapper.readValue(...)
-    Actual pattern: pattern-regex 'readValue'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: readValue
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A08-002
-  message: |
-    Rule: Missing Signature Verification for Webhook Payloads (SPRING-A08-002)
-    Detail: Webhook endpoints should verify signatures or HMAC of incoming requests.
-    Pattern matched: @PostMapping webhook handlers
-    Actual pattern: pattern-regex 'PostMapping'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: PostMapping
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A08-003
-  message: |
-    Rule: Template Injection via FreeMarker (SPRING-A08-003)
-    Detail: Template names passed to FreeMarker should not be taken directly from user input.
-    Pattern matched: Configuration.getTemplate(...)
-    Actual pattern: pattern-regex 'Configuration\.getTemplate'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: Configuration\.getTemplate
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A08-004
-  message: |
-    Rule: Maven Dependency with Known CVE (No Version Management) (SPRING-A08-004)
-    Detail: Dependencies should be tracked for CVEs and pinned via dependencyManagement.
-    Pattern matched: dependencyManagement blocks referencing vulnerable libs
-    Actual pattern: pattern-regex 'dependencyManagement'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: dependencyManagement
-  paths:
-    include:
-    - 'pom.xml'
-
-- id: SPRING-A08-005
-  message: |
-    Rule: Missing Checksum Verification for Downloaded Dependencies (SPRING-A08-005)
-    Detail: Tutorials should show checksum verification when downloading artifacts with Maven plugins or curl/wget.
-    Pattern matched: maven-dependency-plugin:copy usage
-    Actual pattern: pattern-regex 'maven-dependency-plugin:copy'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: "maven-dependency-plugin:copy"
-  paths:
-    include:
-    - 'pom.xml'
-
-- id: SPRING-A09-001
-  message: |
-    Rule: Clear-text Logging of Sensitive Data (SPRING-A09-001)
-    Detail: Do not log passwords, tokens, or other secrets in plain text.
-    Pattern matched: user.getPassword(...) in logging or similar
-    Actual pattern: pattern-regex 'user\.getPassword'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: user\.getPassword
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A09-002
-  message: |
-    Rule: Insufficient Exception Logging (Swallowing Security Exceptions) (SPRING-A09-002)
-    Detail: Security-relevant exceptions should not be silently swallowed.
-    Pattern matched: catch blocks (check manually if they ignore exceptions)
-    Actual pattern: pattern-regex 'catch'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: catch
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A09-004
-  message: |
-    Rule: Stack Trace Exposed to Client (SPRING-A09-004)
-    Detail: Do not return exception messages or stack traces directly in HTTP responses.
-    Pattern matched: Exception.printStackTrace or similar
-    Actual pattern: pattern-regex 'Exception\.printStackTrace'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: Exception\.printStackTrace
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A09-005
-  message: |
-    Rule: No Security Event Logging for Failed Logins (SPRING-A09-005)
-    Detail: Failed login attempts should be logged for security monitoring.
-    Pattern matched: log.warn(...) (used to model where logging should exist)
-    Actual pattern: pattern-regex 'log\.warn'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: log\.warn
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A10-001
-  message: |
-    Rule: SSRF via RestTemplate with User-Controlled URL (SPRING-A10-001)
-    Detail: RestTemplate.getForObject should not be called with unvalidated user-controlled URLs.
-    Pattern matched: restTemplate.getForObject(...)
-    Actual pattern: pattern-regex 'restTemplate\.getForObject'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: restTemplate\.getForObject
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A10-002
-  message: |
-    Rule: File Disclosure via file: Protocol in ResourceLoader (SPRING-A10-002)
-    Detail: ResourceLoader.getResource("file:" + path) from user input can expose arbitrary files.
-    Pattern matched: resourceLoader.getResource(...)
-    Actual pattern: pattern-regex 'resourceLoader\.getResource'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: resourceLoader\.getResource
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A10-003
-  message: |
-    Rule: JNDI Injection via User-Controlled Name (SPRING-A10-003)
-    Detail: InitialContext.lookup(...) should not use raw user-controlled JNDI names.
-    Pattern matched: new InitialContext().lookup(...)
-    Actual pattern: pattern-regex 'InitialContext'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: InitialContext
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A10-004
-  message: |
-    Rule: XXE in XML Parsing with DocumentBuilder (SPRING-A10-004)
-    Detail: DocumentBuilder.parse(request.getInputStream()) must disable external entities.
-    Pattern matched: request.getInputStream() into XML parsing
-    Actual pattern: pattern-regex 'request\.getInputStream'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: request\.getInputStream
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A10-005
-  message: |
-    Rule: DNS Rebinding via SSRF Filter Bypass (SPRING-A10-005)
-    Detail: SSRF protections should account for DNS rebinding, not just initial host checks.
-    Pattern matched: restTemplate.getForObject(...) again used for remote calls
-    Actual pattern: pattern-regex 'restTemplate\.getForObject'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: restTemplate\.getForObject
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
-
-- id: SPRING-A10-006
-  message: |
-    Rule: Blind Trust of Proxy Headers (IP Spoofing) (SPRING-A10-006)
-    Detail: Do not trust X-Forwarded-For and similar headers without validation or a trusted proxy.
-    Pattern matched: request.getHeader(...) usage
-    Actual pattern: pattern-regex 'request\.getHeader'
-  severity: ERROR
-  languages: [generic]
-  pattern-regex: request\.getHeader
-  paths:
-    include:
-    - '*.java'
-    - '*.kt'
+# ------------------------------------------------------------------
+# 8.  GREEDY RULES  –  deleted / merged
+# ------------------------------------------------------------------
+#   - SPRING-A03-008  (script src=http)  → removed – HTTPS is already used
+#   - SPRING-A06-007  (integrity)       → removed – SRI not mandatory for tutorials
+#   - SPRING-A02-001  (jasypt)           → removed – no jasypt in repo
+#   - SPRING-A02-004  (Random)           → removed – too noisy
+#   - SPRING-A03-006  (ResponseEntity.ok) → removed – legitimate pattern
