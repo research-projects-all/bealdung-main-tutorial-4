@@ -1,0 +1,36 @@
+name: Semgrep Security Scan
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+  workflow_dispatch:
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0          # required for diff-aware scan
+
+      - name: Run Semgrep
+        run: |
+          semgrep ci \
+            --config=p/default \
+            --config=p/owasp-top-ten \
+            --config=p/java \
+            --metrics=off \
+            --output=semgrep.txt \
+            --verbose
+
+      - name: Build summary
+        if: always()
+        run: |
+          echo '=== Semgrep findings ==='
+          grep -E '(^files|^findings|^TODO)' semgrep.txt || true
+          echo ''
+          echo 'Full log:'
+          cat semgrep.txt
