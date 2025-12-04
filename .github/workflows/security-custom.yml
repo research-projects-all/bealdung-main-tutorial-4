@@ -1,55 +1,82 @@
-name: Security-Beginner-Positive
+name: Security-Full-Report    # custom + positive in one shot
 
 on:
   push:
     branches: [ main, develop ]
   pull_request:
-    types: [ opened, synchronize, reopened ]
 
 permissions:
-  contents: read          # clone code
-  security-events: write  # upload SARIF
-  pull-requests: write    # post comment
+  contents: read
+  security-events: write
+  pull-requests: write
 
 jobs:
-  positive-scan:
+  full-scan:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Install Semgrep
         run: pip install semgrep
 
-      - name: Run beginner positive rules
+      # ---------- 1.  CUSTOM 70-rule set  ----------
+      - name: Run custom Spring rules
+        id: custom
+        run: |
+          semgrep --config=.semgrep/spring-custom.yml \
+                  --sarif-output=custom.sarif \
+                  --output=custom.txt \
+                  src/ || true
+
+      # ---------- 2.  POSITIVE 7-rule set  ----------
+      - name: Run positive (must-pass) rules
+        id: positive
         run: |
           semgrep --config=.semgrep/spring-positive.yml \
-                  --error --verbose \
-                  --sarif-output=semgrep.sarif \
-                  --output=semgrep.txt \
-                  src/ || true   # always produce artefacts
-        continue-on-error: false   # still fails the step/job when issues found
+                  --sarif-output=positive.sarif \
+                  --output=positive.txt \
+                  src/ || true
 
-      - name: Upload SARIF (v4)
+      # ---------- 3.  UPLOAD SARIF (two sets) ----------
+      - name: Upload custom SARIF
         if: always()
         uses: github/codeql-action/upload-sarif@v4
         with:
-          sarif_file: semgrep.sarif
+          sarif_file: custom.sarif
+          category: custom-spring
 
-      - name: Comment PR (only if we have write token)
-        if: |
-          failure() &&
-          github.event_name == 'pull_request' &&
-          (github.event.pull_request.head.repo.fork == false || 
-           github.event.pull_request.head.repo.full_name == github.repository)
+      - name: Upload positive SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v4
+        with:
+          sarif_file: positive.sarif
+          category: positive-spring
+
+      # ---------- 4.  FINAL GATE – fail if ANY rule hit  ----------
+      - name: Gate (fail if any issue)
+        run: |
+          # non-zero exit code if either file has content
+          if [ -s custom.txt ] || [ -s positive.txt ]; then
+            echo "❌ Security rules fired – see reports above"
+            exit 1
+          fi
+
+      # ---------- 5.  PR COMMENT (readable summary)  ----------
+      - name: Comment PR (readable)
+        if: failure() && github.event_name == 'pull_request'
         uses: actions/github-script@v7
         with:
           script: |
-            const fs = require('fs');
-            const body = fs.readFileSync('semgrep.txt','utf8');
+            const fs   = require('fs');
+            const cust = fs.existsSync('custom.txt')   ? fs.readFileSync('custom.txt','utf8')   : '';
+            const pos  = fs.existsSync('positive.txt') ? fs.readFileSync('positive.txt','utf8') : '';
+            const head = `| Rule Set | Status | Details |
+                        |----------|--------|---------|
+                        | Custom (70 rules)   | ${cust ? '❌ FAILED' : '✅ PASSED'} | ${cust ? '<pre>'+cust+'</pre>' : 'All clear'} |
+                        | Positive (7 rules)  | ${pos  ? '❌ FAILED' : '✅ PASSED'} | ${pos  ? '<pre>'+pos +'</pre>' : 'All clear'} |`;
             github.rest.issues.createComment({
               issue_number: context.issue.number,
               owner: context.repo.owner,
               repo: context.repo.repo,
-              body: '🔒 **Beginner safety checks failed** – click “Details” for auto-fixes or add `# nosemgrep` with justification.\n```\n' + body + '\n```'
+              body: head
             });
