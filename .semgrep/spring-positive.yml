@@ -1,0 +1,14 @@
+rules:
+  - id: SPRING-POS-escape-output
+    pattern-either:
+      - pattern: |
+          model.addAttribute("...", $X);
+          return "...";
+      - pattern: |
+          return "...${...}";
+    message: "POSITIVE RULE: every user attribute written to view must be escaped (th:text / c:out / HtmlUtils)"
+    severity: ERROR
+    languages: [java, jsp]
+    fix-regex:
+      regex: '\$\{([^}]*)\}'
+      replacement: '${spring:escapeHtml($1)}'
