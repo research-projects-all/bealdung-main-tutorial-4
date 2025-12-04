@@ -1,22 +1,13 @@
 rules:
   # 1.  Return user param → must escape
   - id: POS-escape-path-var
-    pattern-either:
-      - pattern: |
-          @GetMapping("...")
-          public String $METHOD(@PathVariable String $X) {
-            ...
-            return $X;
-          }
-      - pattern: |
-          @GetMapping("...")
-          public String $METHOD(@RequestParam String $X) {
-            ...
-            return $X;
-          }
-    message: |
-      🔒  **Beginner safety**: returning the user parameter directly causes **XSS**.
-      Auto-fix: wrap with `HtmlUtils.htmlEscape(..)`.
+    pattern: |
+      @GetMapping($PATH)
+      public String $METHOD(@PathVariable String $X) {
+        ...
+        return $X;
+      }
+    message: "🔒  XSS: return user input directly. Wrap with HtmlUtils.htmlEscape($X)."
     severity: ERROR
     languages: [java]
     fix: |
@@ -25,58 +16,49 @@ rules:
   # 2.  @RequestMapping must specify method
   - id: POS-request-mapping-method
     pattern: |
-      @RequestMapping("...")
-    message: |
-      🔒  **Beginner safety**: use **@GetMapping** or **@PostMapping**, not bare @RequestMapping.
-      Auto-fix: changed to @GetMapping.
+      @RequestMapping($PATH)
+    message: "🔒  Use @GetMapping or @PostMapping, not generic @RequestMapping."
     severity: ERROR
     languages: [java]
     fix: |
-      @GetMapping("...")
+      @GetMapping($PATH)
 
   # 3.  CSRF must stay enabled (comment required to disable)
   - id: POS-csrf-enabled
     pattern: |
       .csrf().disable()
-    message: |
-      🔒  **Beginner safety**: keep CSRF protection.  
-      If you need stateless tokens, add `// stateless API` and `# nosemgrep`.
+    message: "🔒  Keep CSRF protection. Add // stateless API and # nosemgrep if needed."
     severity: ERROR
     languages: [java]
 
   # 4.  Cookie must have HttpOnly + Secure
   - id: POS-cookie-flags
     pattern: |
-      new Cookie(...);
-    message: |
-      🔒  **Beginner safety**: add HttpOnly & Secure flags.
-      Auto-fix: chain setters.
+      new Cookie($ARGS);
+    message: "🔒  Add HttpOnly & Secure flags."
     severity: ERROR
     languages: [java]
     fix-regex:
       regex: 'new Cookie\(([^)]*)\)'
       replacement: 'new Cookie($1); cookie.setHttpOnly(true); cookie.setSecure(true);'
 
-  # 5.  No hard-coded secrets in .properties (generic + path limit)
+  # 5.  No hard-coded secrets in .properties
   - id: POS-no-hard-secret
     pattern-regex: '^(api\.key|db\.password|jwt\.secret)\s*=.+'
-    message: |
-      🔒  **Beginner safety**: externalise secrets (env var / vault).
+    message: "🔒  Externalise secrets (env var / vault)."
     severity: ERROR
     languages: [generic]
     paths:
-      include:
-        - "*.properties"
-        - "*.yml"
-        - "*.yaml"
+      include: ["*.properties", "*.yml", "*.yaml"]
 
   # 6.  Admin endpoint must have @PreAuthorize
   - id: POS-admin-authz
     pattern: |
       @GetMapping("/admin/...")
-      public ... admin(...) { ... }
-    message: |
-      🔒  **Beginner safety**: admin endpoint requires `@PreAuthorize("hasRole('ADMIN')")`.
+      public $RETYPE $METHOD(...) {
+        ...
+      }
+    message: "🔒  Add @PreAuthorize('hasRole(''ADMIN'')')."
     severity: ERROR
     languages: [java]
 
@@ -84,8 +66,6 @@ rules:
   - id: POS-idor-ownership
     pattern: |
       $RET = $REPO.findById($ID);
-    message: |
-      🔒  **Beginner safety**: verify the **current user** owns $ID before returning $RET.
-      Example:  `if (!currentUser.getId().equals($ID)) throw new AccessDeniedException();`
+    message: "🔒  Verify current user owns $ID: currentUser.getId().equals($ID)."
     severity: ERROR
     languages: [java]
