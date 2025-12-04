@@ -1,161 +1,661 @@
+# ================================================================
+# TUNED “BAELDUNG SPRING SECURITY” VULNERABILITY PACK
+# Focus: low-noise findings on beginner Spring tutorials
+# ================================================================
 rules:
-# ------------------------------------------------------------------
-# 1.  AUTHENTICATION / AUTHORISATION  (ERROR only for real flaws)
-# ------------------------------------------------------------------
-  - id: SPRING-A01-001-tuned
-    message: |
-      Admin-style REST endpoints should use method-level security (@PreAuthorize / @Secured).
-      This rule fires only when the path segment looks administrative **and** no security annotation is present.
-    severity: WARNING
-    languages: [java]
-    patterns:
-      - pattern-inside: |
-          @GetMapping("$PATH")
-          $RET $METHOD(..) { ... }
-      - metavariable-regex:
-          metavariable: $PATH
-          regex: .*(?i)(admin|manage|internal|system|config).*
-      - pattern-not: |
-          @PreAuthorize(...)
-          $RET $METHOD(...) { ... }
-      - pattern-not: |
-          @Secured(...)
-          $RET $METHOD(...) { ... }
 
-# A01-002  -  reduce noise: keep only **class-level** @RequestMapping without method
-  - id: SPRING-A01-002-tuned
-    message: |
-      Class-level @RequestMapping that does not list HTTP methods can be ambiguous.
-    severity: WARNING
-    languages: [java]
-    patterns:
-      - pattern: |
-          @RequestMapping("$P")
-          public class $C { ... }
-      - pattern-not: |
-          @RequestMapping(value = "$P", method = { ... })
-          public class $C { ... }
+# ---------- A01  AUTH / AUTHORIZATION ----------
 
-# ------------------------------------------------------------------
-# 2.  SECRETS  (stay ERROR – but ignore comments & example placeholders)
-# ------------------------------------------------------------------
-  - id: SPRING-A02-003-tuned
-    message: "JWT secret seems to be hard-coded; load it from config or vault."
-    severity: ERROR
-    languages: [java]
-    patterns:
-      - pattern-not-inside: |
-          // ...
-      - pattern-not-inside: |
-          /* ... */
-      - pattern: |
-          "$SECRET"
+- id: SPRING-A01-001
+  message: >-
+    Admin-style REST endpoints should use method-level security (@PreAuthorize / @Secured).
+  severity: WARNING
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  patterns:
+    - pattern-inside: |
+        @$CTRL
+        class $C { ... }
+    - metavariable-regex:
+        metavariable: $CTRL
+        regex: "(RestController|Controller)"
+    - pattern-inside: |
+        @GetMapping("$PATH")
+        $RET $METHOD(..) { ... }
+    - metavariable-regex:
+        metavariable: $PATH
+        regex: ".*/(admin|manage|internal|system|config)(/.*)?"
+    - pattern-not: |
+        @PreAuthorize(...)
+    - pattern-not: |
+        @Secured(...)
 
-    metavariable-analysis:
-      - metavariable: $SECRET
-        analyzer: entropy
-        entropy-greater-than: 4.5
-    paths:
-      include:
-        - "*.java"
+- id: SPRING-A01-003
+  message: >-
+    ClassPathResource built from user input can cause path traversal.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  mode: taint
+  pattern-sources:
+    - pattern-either:
+        - pattern: |
+            @PathVariable String $X
+        - pattern: |
+            @RequestParam String $X
+  pattern-sinks:
+    - pattern: |
+        new ClassPathResource($X)
 
-  - id: SPRING-A02-006-tuned
-    message: "Potential hard-coded secret in configuration."
-    severity: ERROR
-    languages: [generic]
-    patterns:
-      - pattern-regex: (?i)(api[_\-]?key|secret|password|token)\s*[:=]\s*["'][^"'\s]+["']
-      - pattern-not-regex: .*(?i)(placeholder|example|dummy|fake|xxx).*
+- id: SPRING-A01-005
+  message: >-
+    WebSocket withSockJS() – restrict allowed origins in production.
+  severity: WARNING
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  pattern: |
+    .withSockJS()
 
-# ------------------------------------------------------------------
-# 3.  INJECTION  (real vulnerabilities → ERROR)
-# ------------------------------------------------------------------
-  - id: SPRING-A03-001-tuned
-    message: "String concatenation inside @Query can lead to JPQL injection."
-    severity: ERROR
-    languages: [java]
-    patterns:
-      - pattern-inside: |
-          @Query("..." + $X + "...")
-          ...
-      - metavariable-analysis:
-          metavariable: $X
-          analyzer: taint
-          taint-options:
-            - by-side-effect: true
+- id: SPRING-A01-006
+  message: >-
+    http.csrf().disable() – explain trade-offs in tutorials; never do blindly in prod.
+  severity: WARNING
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  pattern: |
+    http.csrf().disable()
 
-# ------------------------------------------------------------------
-# 4.  XSS  –  NEW TAINT RULE  (catches the 7 SonarCloud/CodeQL hits)
-# ------------------------------------------------------------------
-  - id: SPRING-A03-009
-    message: "Reflected XSS – user input returned directly in @RestController String."
-    severity: ERROR
-    languages: [java]
-    mode: taint
-    pattern-sources:
-      - patterns:
-          - pattern-either:
-              - pattern: |
-                  @PathVariable $TYPE $VAR
-              - pattern: |
-                  @RequestParam $TYPE $VAR
-    pattern-sinks:
-      - patterns:
-          - pattern: |
-              return $VAR;
-          - pattern-inside: |
-              @RestController
-              ...
-              @GetMapping(...)
-              String $METHOD(...) { ... }
 
-# ------------------------------------------------------------------
-# 5.  FILE UPLOAD  –  only flag **real** missing validation
-# ------------------------------------------------------------------
-  - id: SPRING-A05-001-tuned
-    message: "MultipartFile is used but no size/type/path validation detected."
-    severity: WARNING
-    languages: [java]
-    patterns:
-      - pattern: |
-          MultipartFile $F
-      - pattern-not-inside: |
-          if ($F.getSize() > ...) { ... }
-      - pattern-not-inside: |
-          if (! $F.getOriginalFilename().matches(...) ) { ... }
+# ---------- A02  SECRETS / TLS ----------
 
-# ------------------------------------------------------------------
-# 6.  MAVEN  –  downgrade to WARNING  (best-practice, not vuln)
-# ------------------------------------------------------------------
-  - id: SPRING-A06-001-tuned
-    message: "Consider pinning dependency versions or use dependencyManagement."
-    severity: WARNING
-    languages: [generic]
-    patterns:
-      - pattern-regex: '<dependency>\s*<groupId>[^<]+</groupId>\s*<artifactId>[^<]+</artifactId>\s*(<scope>[^<]+</scope>)?\s*</dependency>'
-      - pattern-not-inside: |
-          <dependencyManagement>...</dependencyManagement>
+- id: SPRING-A02-001
+  message: >-
+    Do not store jasypt.encryptor.password inside application.properties.
+  severity: ERROR
+  languages: [generic]
+  paths:
+    include:
+      - "src/main/resources/*.properties"
+      - "src/main/resources/**/*.properties"
+  pattern-regex: (?i)jasypt\.encryptor\.password\s*[:=]
 
-# ------------------------------------------------------------------
-# 7.  ACTUATOR / TLS / CORS  –  WARNING for tutorials
-# ------------------------------------------------------------------
-  - id: SPRING-A02-008-tuned
-    message: "server.ssl.enabled=false – fine for local dev, but never for prod."
-    severity: WARNING
-    languages: [generic]
-    pattern-regex: ^server\.ssl\.enabled\s*=\s*false\s*($|#)
+- id: SPRING-A02-002
+  message: >-
+    NoOpPasswordEncoder is fine for demos but must never reach production.
+  severity: WARNING
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  pattern: |
+    NoOpPasswordEncoder.getInstance()
 
-  - id: SPRING-A04-002-tuned
-    message: "Exposing all actuator endpoints (*) – restrict in production."
-    severity: WARNING
-    languages: [generic]
-    pattern-regex: management\.endpoints\.web\.exposure\.include\s*=\s*\*
+- id: SPRING-A02-005
+  message: >-
+    setSSLContext(...) that trusts all certs weakens TLS.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  pattern: |
+    setSSLContext(...)
 
-# ------------------------------------------------------------------
-# 8.  GREEDY RULES  –  deleted / merged
-# ------------------------------------------------------------------
-#   - SPRING-A03-008  (script src=http)  → removed – HTTPS is already used
-#   - SPRING-A06-007  (integrity)       → removed – SRI not mandatory for tutorials
-#   - SPRING-A02-001  (jasypt)           → removed – no jasypt in repo
-#   - SPRING-A02-004  (Random)           → removed – too noisy
-#   - SPRING-A03-006  (ResponseEntity.ok) → removed – legitimate pattern
+- id: SPRING-A02-006
+  message: >-
+    Potential hard-coded secret in configuration.
+  severity: ERROR
+  languages: [generic]
+  paths:
+    include:
+      - "src/main/resources/*.properties"
+      - "src/main/resources/**/*.properties"
+      - "src/main/resources/*.yml"
+      - "src/main/resources/**/*.yml"
+  pattern-regex: (?i)(api[_-]?key|secret|password|token)\s*[:=]\s*["'][^"'\s]+["']
+
+- id: SPRING-A02-008
+  message: >-
+    server.ssl.enabled=false – fine for local dev, never for prod.
+  severity: WARNING
+  languages: [generic]
+  paths:
+    include:
+      - "src/main/resources/*.properties"
+      - "src/main/resources/**/*.properties"
+  pattern-regex: ^\s*server\.ssl\.enabled\s*=\s*false
+
+
+# ---------- A03  INJECTION / TEMPLATING ----------
+
+- id: SPRING-A03-001
+  message: >-
+    String concatenation inside @Query can lead to JPQL injection.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  mode: taint
+  pattern-sources:
+    - pattern-either:
+        - pattern: |
+            @PathVariable $T $X
+        - pattern: |
+            @RequestParam $T $X
+  pattern-sinks:
+    - pattern-regex: '@Query\(".*"\s*\+\s*$X'
+
+- id: SPRING-A03-002
+  message: >-
+    ProcessBuilder with user input can lead to command injection.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  mode: taint
+  pattern-sources:
+    - pattern-either:
+        - pattern: |
+            @PathVariable $T $X
+        - pattern: |
+            @RequestParam $T $X
+  pattern-sinks:
+    - pattern: |
+        new ProcessBuilder($X)
+
+- id: SPRING-A03-003
+  message: >-
+    DirContext.search(...) – LDAP filter built from user input must be escaped.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  mode: taint
+  pattern-sources:
+    - pattern-either:
+        - pattern: |
+            @PathVariable $T $X
+        - pattern: |
+            @RequestParam $T $X
+  pattern-sinks:
+    - pattern: |
+        DirContext.search(..., $X, ...)
+
+- id: SPRING-A03-004
+  message: >-
+    SpEL injection – do not parse user input with SpelExpressionParser.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  mode: taint
+  pattern-sources:
+    - pattern-either:
+        - pattern: |
+            @PathVariable $T $X
+        - pattern: |
+            @RequestParam $T $X
+  pattern-sinks:
+    - pattern: |
+        SpelExpressionParser.parseRaw($X)
+
+- id: SPRING-A03-005
+  message: >-
+    th:utext renders unescaped HTML – prefer th:text or sanitise.
+  severity: WARNING
+  languages: [generic]
+  paths:
+    include:
+      - "src/main/resources/templates/**"
+  pattern-regex: th:utext
+
+
+# ---------- A04  SECURITY CONFIG ----------
+
+- id: SPRING-A04-001
+  message: >-
+    @CrossOrigin(origins="*") – restrict in production.
+  severity: WARNING
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  pattern: |
+    @CrossOrigin(origins = "*")
+
+- id: SPRING-A04-002
+  message: >-
+    Exposing all actuator endpoints (*) – restrict in production.
+  severity: WARNING
+  languages: [generic]
+  paths:
+    include:
+      - "src/main/resources/*.properties"
+      - "src/main/resources/**/*.properties"
+      - "src/main/resources/*.yml"
+      - "src/main/resources/**/*.yml"
+  pattern-regex: management\.endpoints\.web\.exposure\.include\s*=\s*\*
+
+- id: SPRING-A04-003
+  message: >-
+    RedirectView built from user input can cause open redirect.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  mode: taint
+  pattern-sources:
+    - pattern-either:
+        - pattern: |
+            @PathVariable String $X
+        - pattern: |
+            @RequestParam String $X
+  pattern-sinks:
+    - pattern: |
+        new RedirectView($X)
+
+- id: SPRING-A04-004
+  message: >-
+    http.headers().disable() – ensure security headers are still added.
+  severity: WARNING
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  pattern: |
+    http.headers().disable()
+
+- id: SPRING-A04-005
+  message: >-
+    requiresChannel() – enforce HTTPS in production.
+  severity: WARNING
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  pattern: |
+    .requiresChannel()
+
+- id: SPRING-A04-006
+  message: >-
+    spring-boot-devtools in pom.xml – remove before prod build.
+  severity: WARNING
+  languages: [generic]
+  paths:
+    include:
+      - pom.xml
+  pattern-regex: spring-boot-devtools
+
+
+# ---------- A05  FILE UPLOAD ----------
+
+- id: SPRING-A05-001
+  message: >-
+    MultipartFile received – validate size, type and path before writing.
+  severity: WARNING
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  patterns:
+    - pattern-inside: |
+        @$CTRL
+        class $C { ... }
+    - metavariable-regex:
+        metavariable: $CTRL
+        regex: "(RestController|Controller)"
+    - pattern: |
+        MultipartFile $F
+    - pattern-not-inside: |
+        if ($F.getSize() > ...) ...
+    - pattern-not-inside: |
+        if (! $F.getOriginalFilename().endsWith(...) ) ...
+
+- id: SPRING-A05-003
+  message: >-
+    getOriginalFilename() used to build file-system path – can lead to traversal.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  patterns:
+    - pattern: |
+        new File(..., $F.getOriginalFilename())
+    - pattern-not-inside: |
+        Paths.get(...).normalize().toString()
+
+- id: SPRING-A05-004
+  message: >-
+    File download – set Content-Type and Content-Disposition.
+  severity: INFO
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  pattern: |
+    ResponseEntity.ok(new UrlResource(...))
+
+
+# ---------- A07  ACCOUNT / PASSWORD ----------
+
+- id: SPRING-A07-001
+  message: >-
+    Password stored plaintext – encode with BCrypt/PBKDF2.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  pattern: |
+    user.setPassword($PLAIN)
+
+- id: SPRING-A07-002
+  message: >-
+    Password-reset token uses currentTimeMillis – use SecureRandom.
+  severity: WARNING
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  pattern: |
+    String $TOKEN = String.valueOf(System.currentTimeMillis() ...)
+
+- id: SPRING-A07-003
+  message: >-
+    Username enumeration – return generic auth-failure message.
+  severity: WARNING
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  pattern: |
+    throw new BadCredentialsException("User not found")
+
+
+# ---------- A08  DESERIAL / TEMPLATE ----------
+
+- id: SPRING-A08-001
+  message: >-
+    Deserialising into Object/raw Map – restrict polymorphic types.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  pattern: |
+    objectMapper.readValue($JSON, Object.class)
+
+- id: SPRING-A08-002
+  message: >-
+    Webhook endpoint – verify HMAC / signature.
+  severity: WARNING
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  patterns:
+    - pattern-inside: |
+        @PostMapping("$PATH")
+        ... webhook ... { ... }
+    - pattern-not: |
+        if (! verifySignature(...) ) ...
+
+- id: SPRING-A08-003
+  message: >-
+    FreeMarker template name from user – validate or whitelist.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  mode: taint
+  pattern-sources:
+    - pattern-either:
+        - pattern: |
+            @PathVariable String $X
+        - pattern: |
+            @RequestParam String $X
+  pattern-sinks:
+    - pattern: |
+        cfg.getTemplate($X)
+
+
+# ---------- A09  LOGGING ----------
+
+- id: SPRING-A09-001
+  message: >-
+    Logging password – remove or mask.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  pattern: |
+    log.info("Password: " + user.getPassword())
+
+- id: SPRING-A09-004
+  message: >-
+    Stack trace printed to client – return generic error.
+  severity: WARNING
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  pattern: |
+    e.printStackTrace(response.getWriter())
+
+
+# ---------- A10  SSRF / XXE / JNDI ----------
+
+- id: SPRING-A10-001
+  message: >-
+    RestTemplate URL from user – validate / whitelist.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  mode: taint
+  pattern-sources:
+    - pattern-either:
+        - pattern: |
+            @PathVariable String $X
+        - pattern: |
+            @RequestParam String $X
+  pattern-sinks:
+    - pattern: |
+        restTemplate.getForObject($X, ...)
+
+- id: SPRING-A10-002
+  message: >-
+    ResourceLoader with file: – can read arbitrary files.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  mode: taint
+  pattern-sources:
+    - pattern-either:
+        - pattern: |
+            @PathVariable String $X
+        - pattern: |
+            @RequestParam String $X
+  pattern-sinks:
+    - pattern: |
+        resourceLoader.getResource("file:" + $X)
+
+- id: SPRING-A10-003
+  message: >-
+    JNDI lookup with user data – can trigger remote class loading.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  mode: taint
+  pattern-sources:
+    - pattern-either:
+        - pattern: |
+            @PathVariable String $X
+        - pattern: |
+            @RequestParam String $X
+  pattern-sinks:
+    - pattern: |
+        new InitialContext().lookup($X)
+
+- id: SPRING-A10-004
+  message: >-
+    XML parsed from request stream – enable secure processing features.
+  severity: ERROR
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  pattern: |
+    DocumentBuilder.parse(request.getInputStream())
+
+- id: SPRING-A10-006
+  message: >-
+    Trusting X-Forwarded-For without validation – can be spoofed.
+  severity: WARNING
+  languages: [java]
+  paths:
+    include:
+      - src/main/java/**
+    exclude:
+      - src/test/java/**
+      - .semgrep/**
+      - target/**
+  pattern: |
+    request.getHeader("X-Forwarded-For")
