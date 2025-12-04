@@ -45,7 +45,8 @@ jobs:
 
       - name: Run beginner positive rules
         run: |
-          echo "🔍 Scanning beginner positive rule-set..."
+          echo "🔍 Scanning beginner positive rule-set (secure-by-default patterns)..."
+          # JSON output for coverage analysis
           semgrep \
             --config .semgrep/spring-positive.yml \
             --error \
@@ -54,12 +55,53 @@ jobs:
             --no-git-ignore \
             --json > positive.json || true
 
+          # Optional human-readable summary (not used for pass/fail)
           semgrep \
             --config .semgrep/spring-positive.yml \
             --severity ERROR \
             --disable-version-check \
             --no-git-ignore \
             --text > positive.txt || true
+
+          # Compute coverage of positive rules (how many "good" patterns are present)
+          python - << 'EOF'
+          import json
+          from pathlib import Path
+
+          # These IDs are what Semgrep prints in logs (note the "semgrep." prefix)
+          expected = {
+              "semgrep.POS-escape-path-var",
+              "semgrep.POS-request-mapping-method",
+              "semgrep.POS-csrf-enabled",
+              "semgrep.POS-cookie-flags",
+              "semgrep.POS-no-hard-secret",
+              "semgrep.POS-admin-authz",
+              "semgrep.POS-idor-ownership",
+          }
+
+          results = []
+          try:
+              with open("positive.json", "r", encoding="utf-8") as f:
+                  data = json.load(f)
+                  results = data.get("results", [])
+          except Exception:
+              results = []
+
+          present = {r.get("check_id") for r in results}
+          matched = expected & present
+          missing = sorted(expected - present)
+
+          # Write a small coverage summary
+          Path("positive-coverage.txt").write_text(
+              f"{len(matched)}/{len(expected)} positive (secure-by-default) rules matched\n",
+              encoding="utf-8",
+          )
+
+          # Write missing rule IDs (if any) to a file
+          with open("positive-missing.txt", "w", encoding="utf-8") as f:
+              for mid in missing:
+                  f.write(mid + "\n")
+          EOF
 
       - name: Generate summary and fail if needed
         if: always()
@@ -68,8 +110,9 @@ jobs:
           echo "🔐 Semgrep security summary"
           echo "=============================================="
 
+          # 1) Custom rules: vulnerabilities / bad patterns
           if [ -s custom.txt ]; then
-            echo "❌ CUSTOM RULES – FAILED:"
+            echo "❌ CUSTOM RULES – VULNERABILITIES FOUND:"
             cat custom.txt
             echo ""
           else
@@ -78,20 +121,44 @@ jobs:
 
           echo "----------------------------------------------"
 
-          if [ -s positive.txt ]; then
-            echo "❌ POSITIVE (BEGINNER) RULES – FAILED:"
-            cat positive.txt
+          # 2) Positive rules: secure-by-default coverage
+          if [ -f positive-coverage.txt ]; then
+            echo "🔎 Secure-by-default coverage (beginner positive rules):"
+            cat positive-coverage.txt
+          else
+            echo "⚠️ Could not compute positive rule coverage (missing positive-coverage.txt)."
+          fi
+
+          if [ -s positive-missing.txt ]; then
+            echo ""
+            echo "❌ SECURE-BY-DEFAULT – FAILED"
+            echo "The following positive rules had NO matches in this tutorial:"
+            cat positive-missing.txt
             echo ""
           else
-            echo "✅ POSITIVE (BEGINNER) RULES – PASSED (no ERROR findings)"
+            echo ""
+            echo "✅ SECURE-BY-DEFAULT – PASSED"
+            echo "All 7 beginner positive rules are present at least once."
           fi
 
           echo "=============================================="
 
-          # Exit non-zero if any findings exist
-          if [ -s custom.txt ] || [ -s positive.txt ]; then
-            echo "💥 BUILD FAILED – fix issues or justify with '# nosemgrep' in exceptional cases."
+          # 3) Decide overall pass/fail:
+          #    - Fail if any custom vulnerabilities are found
+          #    - OR if any positive rules are missing (not secure by default)
+          FAIL=0
+
+          if [ -s custom.txt ]; then
+            FAIL=1
+          fi
+
+          if [ -s positive-missing.txt ]; then
+            FAIL=1
+          fi
+
+          if [ "$FAIL" -ne 0 ]; then
+            echo "💥 BUILD FAILED – tutorial is not secure (vulnerabilities and/or not secure-by-default)."
             exit 1
           else
-            echo "🎉 BUILD PASSED – all security rules satisfied."
+            echo "🎉 BUILD PASSED – no vulnerabilities and secure-by-default (all positive patterns present)."
           fi
