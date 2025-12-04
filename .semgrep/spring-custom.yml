@@ -1153,7 +1153,8 @@ rules:
   severity: ERROR
   languages:
   - generic
-  pattern-regex: maven-dependency-plugin:copy
+  pattern-regex: "maven-dependency-plugin:copy"
+
   paths:
     include:
     - 'pom.xml'

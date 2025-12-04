@@ -39,7 +39,7 @@ rules:
   # 3. CSRF should not be globally disabled
   - id: POS-csrf-enabled
     pattern: |
-      .csrf().disable()
+      $CFG.csrf().disable();
     message: |
       🔒  **Beginner safety**: avoid calling `.csrf().disable()` in starter Spring
       Security configuration. Keeping CSRF enabled is safer for browser-based apps.
@@ -80,10 +80,13 @@ rules:
   # 6. Admin endpoint must have @PreAuthorize
   - id: POS-admin-authz
     pattern: |
-      @GetMapping("/admin/...")
+      @GetMapping($P)
       public $RET $METHOD(..) {
         ...
       }
+    metavariable-regex:
+      metavariable: $P
+      regex: ^"/admin/.*"
     message: |
       🔒  **Beginner safety**: admin endpoints should use method-level authorization,
       e.g. `@PreAuthorize("hasRole('ADMIN')")`. Tutorials should always model this
