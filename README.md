@@ -34,3 +34,5 @@ public ThymeleafViewResolver viewResolver() { ... }
 
 
 NO  need to change the method bodies or class names; the type names (SpringTemplateEngine, SpringResourceTemplateResolver, ThymeleafViewResolver) are the same in Spring 6 – only the package changed.
+
+this contain custom safe patterns
