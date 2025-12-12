@@ -1,10 +1,11 @@
 rules:
   # ============================================================
   # Spring Boot / Spring MVC — OWASP-aligned custom rules
+  # Updated: 2024-12-12
   # ============================================================
 
   # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection (SQL)
+  # OWASP Top 10:2021 — A03 Injection (SQL - JDBC)
   # ------------------------------------------------------------
   - id: SPRING-OWASP-SQLI-JDBC-STATEMENT
     message: >
@@ -19,9 +20,11 @@ rules:
       cwe: "CWE-89"
       confidence: high
       framework: [spring, spring-mvc, spring-boot]
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     pattern-sources:
       - pattern: $REQ.getParameter(...)
       - pattern: $REQ.getHeader(...)
@@ -39,7 +42,7 @@ rules:
       - pattern: java.util.regex.Pattern.matches($RE, $X)
 
   # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection (JPA)
+  # OWASP Top 10:2021 — A03 Injection (SQL - JPA)
   # ------------------------------------------------------------
   - id: SPRING-OWASP-SQLI-JPA-QUERYSTRING
     message: >
@@ -54,9 +57,11 @@ rules:
       cwe: "CWE-89"
       confidence: high
       framework: [spring, jpa]
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     pattern-sources:
       - pattern: $REQ.getParameter(...)
       - pattern: $REQ.getHeader(...)
@@ -87,9 +92,11 @@ rules:
       cwe: "CWE-78"
       confidence: high
       framework: [spring]
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html"
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     pattern-sources:
       - pattern: $REQ.getParameter(...)
       - pattern: $REQ.getHeader(...)
@@ -103,6 +110,108 @@ rules:
       - pattern: (new ProcessBuilder($LIST)).start()
     pattern-sanitizers:
       - pattern: java.util.regex.Pattern.matches($RE, $X)
+
+  # ------------------------------------------------------------
+  # OWASP Top 10:2021 — A03 Injection (Spring View Injection / SSTI)
+  # NEW RULE: Detects when user input determines the return view name.
+  # ------------------------------------------------------------
+  - id: SPRING-OWASP-VIEW-INJECTION
+    message: >
+      Possible Spring View Injection (SSTI): User input is returned directly as a View name.
+      If the return value is user-controlled, an attacker can manipulate the view resolver
+      to execute arbitrary code (SSTI) or access hidden files.
+      Fix: Return a redirect ("redirect:/") or use a strict allowlist of view names.
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    metadata:
+      category: security
+      owasp_top10_2021: "A03:2021 Injection"
+      cwe: "CWE-94"
+      confidence: medium
+      framework: [spring-mvc]
+      references:
+        - "https://www.veracode.com/security/java/spring-view-manipulation"
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
+    pattern-sources:
+      - pattern: $REQ.getParameter(...)
+      - pattern: |
+          @RequestParam(...) $T $X
+      - pattern: |
+          @PathVariable(...) $T $X
+    pattern-sinks:
+      - patterns:
+          - pattern-inside: |
+              @Controller
+              class $C {
+                ...
+              }
+          - pattern-inside: |
+              @$MAPPING(...)
+              public String $METHOD(...) {
+                ...
+              }
+          - pattern: return $X;
+
+  # ------------------------------------------------------------
+  # OWASP Top 10:2021 — A03 Injection (Spring Expression Language - SpEL)
+  # NEW RULE: Detects evaluation of SpEL expressions from user input.
+  # ------------------------------------------------------------
+  - id: SPRING-OWASP-SPEL-INJECTION
+    message: >
+      Critical SpEL Injection: User input reaches ExpressionParser.parseExpression().
+      SpEL (Spring Expression Language) is powerful and allows Remote Code Execution (RCE).
+      Never parse untrusted input as an expression. Use SimpleEvaluationContext if necessary.
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    metadata:
+      category: security
+      owasp_top10_2021: "A03:2021 Injection"
+      cwe: "CWE-94"
+      confidence: high
+      framework: [spring]
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/Expression_Language_Injection_Prevention_Cheat_Sheet.html"
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
+    pattern-sources:
+      - pattern: $REQ.getParameter(...)
+      - pattern: |
+          @RequestParam(...) $T $X
+      - pattern: |
+          @PathVariable(...) $T $X
+    pattern-sinks:
+      - pattern: $PARSER.parseExpression(...)
+
+  # ------------------------------------------------------------
+  # OWASP Top 10:2021 — A08 Software and Data Integrity Failures (Jackson Deserialization)
+  # NEW RULE: Detects unsafe Jackson configuration.
+  # ------------------------------------------------------------
+  - id: SPRING-OWASP-JACKSON-UNSAFE-TYPING
+    message: >
+      Unsafe Jackson Configuration: enableDefaultTyping() (or similar) allows polymorphic deserialization.
+      This is a major RCE vector if the JSON content is untrusted.
+      Use @JsonTypeInfo with specific allowlists or avoid default typing completely.
+    severity: ERROR
+    languages: [java]
+    metadata:
+      category: security
+      owasp_top10_2021: "A08:2021 Software and Data Integrity Failures"
+      cwe: "CWE-502"
+      confidence: high
+      framework: [spring, jackson]
+      references:
+        - "https://cowtowncoder.medium.com/on-jackson-cves-dont-panic-here-is-what-you-need-to-know-54cd0d6e8062"
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
+    pattern-either:
+      - pattern: $MAPPER.enableDefaultTyping(...)
+      - pattern: $MAPPER.activateDefaultTyping(...)
 
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A03 Injection (XPath)
@@ -122,7 +231,7 @@ rules:
       framework: [spring]
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     pattern-sources:
       - pattern: $REQ.getParameter(...)
       - pattern: |
@@ -152,9 +261,11 @@ rules:
       cwe: "CWE-79"
       confidence: medium
       framework: [spring-mvc, spring-boot]
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     pattern-sources:
       - pattern: $REQ.getParameter(...)
       - pattern: |
@@ -193,7 +304,7 @@ rules:
       framework: [spring]
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     pattern-either:
       - pattern: $LOG.warn($S + $X, ...)
       - pattern: $LOG.info($S + $X, ...)
@@ -216,9 +327,11 @@ rules:
       cwe: "CWE-915"
       confidence: low
       framework: [spring-mvc, spring-boot]
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html"
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     patterns:
       - pattern: |
           public $RET $M(..., @RequestBody $T $X, ...){ ... }
@@ -243,7 +356,7 @@ rules:
       framework: [spring]
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     patterns:
       - pattern: |
           public $RET $M(..., @RequestBody $T $X, ...){ ... }
@@ -268,9 +381,11 @@ rules:
       cwe: "CWE-918"
       confidence: medium
       framework: [spring, spring-boot]
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     pattern-sources:
       - pattern: $REQ.getParameter(...)
       - pattern: $REQ.getHeader(...)
@@ -304,9 +419,11 @@ rules:
       cwe: "CWE-352"
       confidence: high
       framework: [spring-security]
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html"
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     pattern-either:
       - pattern: http.csrf().disable()
       - pattern: $HTTP.csrf($C -> $C.disable())
@@ -326,9 +443,11 @@ rules:
       owasp_top10_2021: "A03:2021 Injection"
       cwe: "CWE-611"
       confidence: medium
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html"
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     patterns:
       - pattern: |
           $F = javax.xml.parsers.DocumentBuilderFactory.newInstance();
@@ -355,9 +474,11 @@ rules:
       cwe: "CWE-90"
       confidence: medium
       framework: [spring-ldap]
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html"
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     pattern-sources:
       - pattern: $REQ.getParameter(...)
       - pattern: |
@@ -385,7 +506,7 @@ rules:
       framework: [spring-data-mongodb]
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     pattern-sources:
       - pattern: $REQ.getParameter(...)
       - pattern: |
@@ -396,14 +517,6 @@ rules:
       - pattern: new org.springframework.data.mongodb.core.query.BasicQuery($Q)
       - pattern: org.bson.Document.parse($Q)
 
-  # ============================================================
-  # NEW ADDITIONS: OWASP Beginner Pitfalls & Best Practices
-  # ============================================================
-
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A01 Broken Access Control (Path Traversal)
-  # Reference: OWASP Path Traversal
-  # Common beginner mistake: Using raw input to construct file paths.
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A01 Broken Access Control (Path Traversal)
   # FIXED: Generalized sinks to catch string concatenation (e.g. "path/" + input)
@@ -421,9 +534,11 @@ rules:
       owasp_top10_2021: "A01:2021 Broken Access Control"
       cwe: "CWE-22"
       confidence: high
+      references:
+        - "https://owasp.org/www-community/attacks/Path_Traversal"
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     pattern-sources:
       - pattern: $REQ.getParameter(...)
       - pattern: |
@@ -431,16 +546,12 @@ rules:
       - pattern: |
           @PathVariable(...) $T $X
     pattern-sinks:
-      # We removed "$INPUT" arguments to let Semgrep detect tainted data
-      # anywhere inside the constructor arguments (including concatenations).
       - pattern: new java.io.File(...)
       - pattern: new java.io.FileInputStream(...)
       - pattern: java.nio.file.Paths.get(...)
 
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A07 Identification and Authentication Failures
-  # Reference: OWASP Hardcoded Secrets
-  # Heuristic: Detection of variable names implying secrets being assigned string literals.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-HARDCODED-SECRET-HEURISTIC
     message: >
@@ -453,9 +564,11 @@ rules:
       owasp_top10_2021: "A07:2021 Identification and Authentication Failures"
       cwe: "CWE-798"
       confidence: low
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html"
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     patterns:
       - pattern: String $VAR = "$LITERAL";
       - metavariable-regex:
@@ -463,12 +576,10 @@ rules:
           regex: "(?i).*(password|secret|apikey|api_key|token|auth).*"
       - metavariable-regex:
           metavariable: $LITERAL
-          regex: "^(?=.*[A-Za-z])(?=.*[0-9]).{8,}$" # Rudimentary entropy check (mixed alphanumeric, >8 chars)
+          regex: "^(?=.*[A-Za-z])(?=.*[0-9]).{8,}$"
 
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A02 Cryptographic Failures
-  # Reference: OWASP Cryptographic Storage Cheat Sheet
-  # Common beginner mistake: Using weak hashing algorithms like MD5/SHA-1.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-WEAK-HASHING-MD5-SHA1
     message: >
@@ -481,9 +592,11 @@ rules:
       owasp_top10_2021: "A02:2021 Cryptographic Failures"
       cwe: "CWE-327"
       confidence: high
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     pattern-either:
       - pattern: java.security.MessageDigest.getInstance("MD5")
       - pattern: java.security.MessageDigest.getInstance("SHA-1")
@@ -492,8 +605,6 @@ rules:
 
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A02 Cryptographic Failures (Insecure Randomness)
-  # Reference: OWASP Java Security Cheat Sheet
-  # Common beginner mistake: Using java.util.Random for security tokens.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-INSECURE-RANDOM
     message: >
@@ -506,15 +617,15 @@ rules:
       owasp_top10_2021: "A02:2021 Cryptographic Failures"
       cwe: "CWE-330"
       confidence: medium
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     pattern: new java.util.Random(...)
 
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A01 Broken Access Control (CORS)
-  # Reference: OWASP HTML5 Security Cheat Sheet
-  # Common beginner mistake: Allowing all origins ('*') to avoid CORS errors during dev.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-CORS-PERMISSIVE
     message: >
@@ -528,9 +639,11 @@ rules:
       cwe: "CWE-942"
       confidence: high
       framework: [spring-mvc]
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html#cors"
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     patterns:
       - pattern-either:
         - pattern: $REG.addMapping(...).allowedOrigins("*")
@@ -554,7 +667,7 @@ rules:
       framework: [spring-mvc]
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     patterns:
       - pattern: |
           @InitBinder
@@ -577,6 +690,6 @@ rules:
       framework: [spring]
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     pattern: |
       public $RET $M(..., @Valid @RequestBody $T $X, ...){ ... }
