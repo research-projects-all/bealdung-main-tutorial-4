@@ -1,22 +1,10 @@
 rules:
   # ============================================================
   # Spring Boot / Spring MVC — OWASP-aligned custom rules
-  #
-  # Design goals:
-  # - Use taint mode for “real vulnerability” rules to reduce false positives:
-  #     request-derived sources -> high-risk sinks.
-  # - Keep best-practice guidance rules as WARNING/INFO.
-  # - Exclude tests by default to avoid tutorial scaffolding noise.
   # ============================================================
 
   # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection
-  # https://owasp.org/Top10/2021/A03_2021-Injection/
-  # Reference: OWASP Java Security Cheat Sheet (SQL injection prevention)
-  # https://cheatsheetseries.owasp.org/cheatsheets/Java_Security_Cheat_Sheet.html
-  #
-  # JDBC SQL injection: request-derived data reaches Statement.execute*(String).
-  # Prefer PreparedStatement with placeholders and setXxx() parameterization.
+  # OWASP Top 10:2021 — A03 Injection (SQL)
   # ------------------------------------------------------------
   - id: SPRING-OWASP-SQLI-JDBC-STATEMENT
     message: >
@@ -48,17 +36,10 @@ rules:
       - pattern: $STMT.executeUpdate($SQL)
       - pattern: $STMT.execute($SQL)
     pattern-sanitizers:
-      # Treat allowlist validation as sanitizer to reduce FPs (still review).
       - pattern: java.util.regex.Pattern.matches($RE, $X)
 
   # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection
-  # https://owasp.org/Top10/2021/A03_2021-Injection/
-  # Reference: OWASP Java Security Cheat Sheet (JPA query parameterization)
-  # https://cheatsheetseries.owasp.org/cheatsheets/Java_Security_Cheat_Sheet.html
-  #
-  # JPA injection: request-derived data reaches createQuery/createNativeQuery with a dynamic string.
-  # Prefer parameterized JPQL (:name) / Criteria API.
+  # OWASP Top 10:2021 — A03 Injection (JPA)
   # ------------------------------------------------------------
   - id: SPRING-OWASP-SQLI-JPA-QUERYSTRING
     message: >
@@ -91,13 +72,7 @@ rules:
       - pattern: java.util.regex.Pattern.matches($RE, $X)
 
   # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection
-  # https://owasp.org/Top10/2021/A03_2021-Injection/
-  # Reference: OWASP Java Security Cheat Sheet (OS command injection prevention)
-  # https://cheatsheetseries.owasp.org/cheatsheets/Java_Security_Cheat_Sheet.html
-  #
-  # OS Command Injection: request-derived data reaches Runtime.exec / ProcessBuilder.
-  # Prefer safe platform APIs or strict allowlist mapping to fixed commands.
+  # OWASP Top 10:2021 — A03 Injection (OS Command)
   # ------------------------------------------------------------
   - id: SPRING-OWASP-CMDI-EXEC
     message: >
@@ -130,13 +105,7 @@ rules:
       - pattern: java.util.regex.Pattern.matches($RE, $X)
 
   # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection
-  # https://owasp.org/Top10/2021/A03_2021-Injection/
-  # Reference: OWASP Java Security Cheat Sheet (XPath injection prevention)
-  # https://cheatsheetseries.owasp.org/cheatsheets/Java_Security_Cheat_Sheet.html
-  #
-  # XPath Injection: request-derived data reaches XPath.compile/evaluate on dynamic expressions.
-  # Prefer XPathVariableResolver (variable binding).
+  # OWASP Top 10:2021 — A03 Injection (XPath)
   # ------------------------------------------------------------
   - id: SPRING-OWASP-XPATH-INJECTION
     message: >
@@ -168,13 +137,7 @@ rules:
       - pattern: java.util.regex.Pattern.matches($RE, $X)
 
   # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection (XSS)
-  # https://owasp.org/Top10/2021/A03_2021-Injection/
-  # Reference: OWASP Java Security Cheat Sheet (XSS: encode/sanitize output)
-  # https://cheatsheetseries.owasp.org/cheatsheets/Java_Security_Cheat_Sheet.html
-  #
-  # Reflected XSS: request-derived data returned as response body without encoding/sanitization.
-  # Sanitizers: OWASP Java Encoder / Spring HtmlUtils / OWASP Java HTML Sanitizer.
+  # OWASP Top 10:2021 — A03 Injection (XSS Reflected)
   # ------------------------------------------------------------
   - id: SPRING-OWASP-XSS-REFLECTED-RAW-RESPONSE
     message: >
@@ -214,13 +177,7 @@ rules:
       - pattern: $POLICY.sanitize($X)
 
   # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A09 Security Logging and Monitoring Failures (related safe logging)
-  # https://owasp.org/Top10/2021/A09_2021-Security_Logging_and_Monitoring_Failures/
-  # Reference: OWASP Java Security Cheat Sheet (Log Injection guidance)
-  # https://cheatsheetseries.owasp.org/cheatsheets/Java_Security_Cheat_Sheet.html
-  #
-  # Unsafe logging pattern: string concatenation in logger calls.
-  # Kept as WARNING (can be noisy in tutorials).
+  # OWASP Top 10:2021 — A09 Security Logging Failures
   # ------------------------------------------------------------
   - id: SPRING-OWASP-LOG-INJECTION-CONCAT
     message: >
@@ -245,13 +202,7 @@ rules:
       - pattern: $LOG.trace($S + $X, ...)
 
   # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A04 Insecure Design (mass assignment missing control)
-  # https://owasp.org/Top10/2021/A04_2021-Insecure_Design/
-  # Reference: OWASP Mass Assignment Cheat Sheet
-  # https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html
-  #
-  # Heuristic: @RequestBody binds directly into a domain/entity-looking type.
-  # WARNING + low confidence to avoid over-flagging.
+  # OWASP Top 10:2021 — A04 Insecure Design (Mass Assignment)
   # ------------------------------------------------------------
   - id: SPRING-OWASP-MASS-ASSIGNMENT-REQUESTBODY-DOMAIN
     message: >
@@ -276,13 +227,7 @@ rules:
           regex: ".*(Entity|Model|Domain|User|Account|Admin|Profile).*"
 
   # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection (input validation as prevention control)
-  # https://owasp.org/Top10/2021/A03_2021-Injection/
-  # Reference: OWASP Bean Validation Cheat Sheet
-  # https://cheatsheetseries.owasp.org/cheatsheets/Bean_Validation_Cheat_Sheet.html
-  #
-  # Missing @Valid/@Validated on @RequestBody (boundary validation).
-  # WARNING (best-practice; avoids breaking CI on tutorials).
+  # OWASP Top 10:2021 — A03 Injection (Missing Validation)
   # ------------------------------------------------------------
   - id: SPRING-OWASP-BEAN-VALIDATION-MISSING-VALID
     message: >
@@ -307,18 +252,8 @@ rules:
       - pattern-not: |
           public $RET $M(..., @Validated @RequestBody $T $X, ...){ ... }
 
-  # ============================================================
-  # Missing rules added from OWASP material you pasted
-  # ============================================================
-
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A10 SSRF
-  # https://owasp.org/Top10/2021/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/
-  # Reference: OWASP SSRF Prevention Cheat Sheet
-  # https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html
-  #
-  # SSRF: request-derived URL reaches outbound HTTP clients.
-  # Taint-mode + narrow sinks to reduce false positives.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-SSRF-HTTPCLIENT-TAINT
     message: >
@@ -351,17 +286,11 @@ rules:
       - pattern: $WEBCLIENT.post().uri($URL).retrieve()
       - pattern: java.net.URI.create($URL)
     pattern-sanitizers:
-      # Treat explicit allowlist checks as sanitizers (cuts false positives).
       - pattern: $ALLOWED.contains($HOST)
       - pattern: $URI.getHost()
 
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A01 Broken Access Control (CSRF)
-  # https://owasp.org/Top10/2021/A01_2021-Broken_Access_Control/
-  # Reference: OWASP CSRF Prevention Cheat Sheet
-  # https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
-  #
-  # CSRF disabled in Spring Security.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-CSRF-DISABLED
     message: >
@@ -385,12 +314,6 @@ rules:
 
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A03 Injection (XXE)
-  # https://owasp.org/Top10/2021/A03_2021-Injection/
-  # Reference: OWASP XXE Prevention Cheat Sheet
-  # https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html
-  #
-  # XXE hardening: DocumentBuilderFactory used to parse without disallowing DOCTYPE.
-  # Not taint-mode because XML sources vary; uses pattern-not-inside to reduce FPs.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-XXE-UNHARDENED-DOCUMENTBUILDERFACTORY
     message: >
@@ -418,11 +341,6 @@ rules:
 
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A03 Injection (LDAP)
-  # https://owasp.org/Top10/2021/A03_2021-Injection/
-  # Reference: OWASP LDAP Injection Prevention Cheat Sheet
-  # https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html
-  #
-  # LDAP injection: request-derived input reaches LDAP filter strings.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-LDAP-INJECTION-FILTERSTRING
     message: >
@@ -451,16 +369,10 @@ rules:
 
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A03 Injection (NoSQL)
-  # https://owasp.org/Top10/2021/A03_2021-Injection/
-  # Reference: OWASP Java Security Cheat Sheet (NoSQL injection guidance)
-  # https://cheatsheetseries.owasp.org/cheatsheets/Java_Security_Cheat_Sheet.html
-  #
-  # NoSQL injection: request-derived input reaches string-based Mongo query parsing.
-  # Prefer Criteria/Query builder APIs and validate/allowlist inputs.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-NOSQL-INJECTION-MONGO-BASICQUERY
     message: >
-      Possible NoSQL injection: request-derived input reaches a Mongo string-based query (BasicQuery/JSON query string).
+      Possible NoSQL injection: request-derived input reaches a Mongo string-based query.
       Prefer Criteria/Query builder APIs and validate/allowlist inputs.
     severity: ERROR
     languages: [java]
@@ -485,18 +397,147 @@ rules:
       - pattern: org.bson.Document.parse($Q)
 
   # ============================================================
-  # Positive / secure-by-default detection rules (INFO)
-  # These support your tutorial-quality analysis without inflating vuln counts.
+  # NEW ADDITIONS: OWASP Beginner Pitfalls & Best Practices
   # ============================================================
 
   # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A04 Insecure Design (presence of mitigation control)
-  # https://owasp.org/Top10/2021/A04_2021-Insecure_Design/
-  # Reference: OWASP Mass Assignment Cheat Sheet (Spring MVC allow-listing)
-  # https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html
-  #
-  # Detect: @InitBinder + setAllowedFields allowlist present.
+  # OWASP Top 10:2021 — A01 Broken Access Control (Path Traversal)
+  # Reference: OWASP Path Traversal
+  # Common beginner mistake: Using raw input to construct file paths.
   # ------------------------------------------------------------
+  - id: SPRING-OWASP-PATH-TRAVERSAL-FILE
+    message: >
+      Possible Path Traversal: request-derived input used to access filesystem.
+      Attackers can use "../" to access unauthorized files.
+      Validate input against an allowlist of filenames or use Path.normalize().starts_with(base).
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    metadata:
+      category: security
+      owasp_top10_2021: "A01:2021 Broken Access Control"
+      cwe: "CWE-22"
+      confidence: high
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+    pattern-sources:
+      - pattern: $REQ.getParameter(...)
+      - pattern: |
+          @RequestParam(...) $T $X
+      - pattern: |
+          @PathVariable(...) $T $X
+    pattern-sinks:
+      - pattern: new java.io.File(..., $INPUT)
+      - pattern: new java.io.File($INPUT)
+      - pattern: java.nio.file.Paths.get($INPUT)
+      - pattern: java.nio.file.Paths.get(..., $INPUT)
+      - pattern: new java.io.FileInputStream($INPUT)
+
+  # ------------------------------------------------------------
+  # OWASP Top 10:2021 — A07 Identification and Authentication Failures
+  # Reference: OWASP Hardcoded Secrets
+  # Heuristic: Detection of variable names implying secrets being assigned string literals.
+  # ------------------------------------------------------------
+  - id: SPRING-OWASP-HARDCODED-SECRET-HEURISTIC
+    message: >
+      Potential hardcoded secret. Storing secrets (passwords, keys, tokens) in source code
+      is a critical risk. Use environment variables or a secrets manager (Spring Vault/Cloud Config).
+    severity: ERROR
+    languages: [java]
+    metadata:
+      category: security
+      owasp_top10_2021: "A07:2021 Identification and Authentication Failures"
+      cwe: "CWE-798"
+      confidence: low
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+    patterns:
+      - pattern: String $VAR = "$LITERAL";
+      - metavariable-regex:
+          metavariable: $VAR
+          regex: "(?i).*(password|secret|apikey|api_key|token|auth).*"
+      - metavariable-regex:
+          metavariable: $LITERAL
+          regex: "^(?=.*[A-Za-z])(?=.*[0-9]).{8,}$" # Rudimentary entropy check (mixed alphanumeric, >8 chars)
+
+  # ------------------------------------------------------------
+  # OWASP Top 10:2021 — A02 Cryptographic Failures
+  # Reference: OWASP Cryptographic Storage Cheat Sheet
+  # Common beginner mistake: Using weak hashing algorithms like MD5/SHA-1.
+  # ------------------------------------------------------------
+  - id: SPRING-OWASP-WEAK-HASHING-MD5-SHA1
+    message: >
+      Weak cryptographic hashing algorithm detected (MD5/SHA-1).
+      Use stronger algorithms like SHA-256 (MessageDigest) or bcrypt/Argon2 (for passwords via Spring Security).
+    severity: ERROR
+    languages: [java]
+    metadata:
+      category: security
+      owasp_top10_2021: "A02:2021 Cryptographic Failures"
+      cwe: "CWE-327"
+      confidence: high
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+    pattern-either:
+      - pattern: java.security.MessageDigest.getInstance("MD5")
+      - pattern: java.security.MessageDigest.getInstance("SHA-1")
+      - pattern: org.apache.commons.codec.digest.DigestUtils.md5Hex(...)
+      - pattern: org.apache.commons.codec.digest.DigestUtils.sha1Hex(...)
+
+  # ------------------------------------------------------------
+  # OWASP Top 10:2021 — A02 Cryptographic Failures (Insecure Randomness)
+  # Reference: OWASP Java Security Cheat Sheet
+  # Common beginner mistake: Using java.util.Random for security tokens.
+  # ------------------------------------------------------------
+  - id: SPRING-OWASP-INSECURE-RANDOM
+    message: >
+      Predictable pseudorandom number generator (java.util.Random) used.
+      If generating security tokens, passwords, or keys, use java.security.SecureRandom.
+    severity: WARNING
+    languages: [java]
+    metadata:
+      category: security
+      owasp_top10_2021: "A02:2021 Cryptographic Failures"
+      cwe: "CWE-330"
+      confidence: medium
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+    pattern: new java.util.Random(...)
+
+  # ------------------------------------------------------------
+  # OWASP Top 10:2021 — A01 Broken Access Control (CORS)
+  # Reference: OWASP HTML5 Security Cheat Sheet
+  # Common beginner mistake: Allowing all origins ('*') to avoid CORS errors during dev.
+  # ------------------------------------------------------------
+  - id: SPRING-OWASP-CORS-PERMISSIVE
+    message: >
+      Permissive CORS policy detected (allowedOrigins("*")).
+      This allows any website to make requests to your API. Explicitly allowlist trusted domains.
+    severity: WARNING
+    languages: [java]
+    metadata:
+      category: security
+      owasp_top10_2021: "A01:2021 Broken Access Control"
+      cwe: "CWE-942"
+      confidence: high
+      framework: [spring-mvc]
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+    patterns:
+      - pattern-either:
+        - pattern: $REG.addMapping(...).allowedOrigins("*")
+        - pattern: |
+            @CrossOrigin(origins = "*")
+
+  # ============================================================
+  # Positive / secure-by-default detection rules (INFO)
+  # ============================================================
+
   - id: POS-SPRING-MASSASSIGNMENT-INITBINDER-ALLOWLIST
     message: >
       Good practice: controller uses @InitBinder with setAllowedFields allowlist to mitigate mass assignment.
@@ -520,14 +561,6 @@ rules:
             ...
           }
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection (input validation control)
-  # https://owasp.org/Top10/2021/A03_2021-Injection/
-  # Reference: OWASP Bean Validation Cheat Sheet
-  # https://cheatsheetseries.owasp.org/cheatsheets/Bean_Validation_Cheat_Sheet.html
-  #
-  # Detect: @Valid applied at controller boundary for @RequestBody models.
-  # ------------------------------------------------------------
   - id: POS-SPRING-BEANVALIDATION-VALID-REQUESTBODY
     message: >
       Good practice: request model validated at controller boundary using @Valid.
