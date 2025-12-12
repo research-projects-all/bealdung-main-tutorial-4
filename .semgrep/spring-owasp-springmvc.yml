@@ -405,6 +405,9 @@ rules:
   # Reference: OWASP Path Traversal
   # Common beginner mistake: Using raw input to construct file paths.
   # ------------------------------------------------------------
+  # OWASP Top 10:2021 — A01 Broken Access Control (Path Traversal)
+  # FIXED: Generalized sinks to catch string concatenation (e.g. "path/" + input)
+  # ------------------------------------------------------------
   - id: SPRING-OWASP-PATH-TRAVERSAL-FILE
     message: >
       Possible Path Traversal: request-derived input used to access filesystem.
@@ -428,11 +431,11 @@ rules:
       - pattern: |
           @PathVariable(...) $T $X
     pattern-sinks:
-      - pattern: new java.io.File(..., $INPUT)
-      - pattern: new java.io.File($INPUT)
-      - pattern: java.nio.file.Paths.get($INPUT)
-      - pattern: java.nio.file.Paths.get(..., $INPUT)
-      - pattern: new java.io.FileInputStream($INPUT)
+      # We removed "$INPUT" arguments to let Semgrep detect tainted data
+      # anywhere inside the constructor arguments (including concatenations).
+      - pattern: new java.io.File(...)
+      - pattern: new java.io.FileInputStream(...)
+      - pattern: java.nio.file.Paths.get(...)
 
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A07 Identification and Authentication Failures
