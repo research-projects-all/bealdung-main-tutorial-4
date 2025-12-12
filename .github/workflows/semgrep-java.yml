@@ -1,0 +1,17 @@
+name: Semgrep-Java-Spring-OWASP
+
+on:
+  pull_request:
+  push:
+    branches: [main, master]
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    container:
+      image: semgrep/semgrep:latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          semgrep --config .semgrep/java-spring-owasp.yml \
+                  --error --text --verbose
