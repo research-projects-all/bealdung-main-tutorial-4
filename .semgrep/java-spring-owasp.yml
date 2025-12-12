@@ -1,0 +1,144 @@
+rules:
+
+# ---------- A01 Broken Access Control ----------
+- id: spring-unrestricted-request-mapping
+  pattern-either:
+    - pattern: |
+        @RequestMapping($PATH)
+        $RET $METHOD(..) { ... }
+    - pattern: |
+        @RequestMapping(value=$PATH)
+        $RET $METHOD(..) { ... }
+  message: "A01:UnrestrictedMapping – Add method={GET,POST,...} to avoid CSRF bypass"
+  languages: [java]
+  severity: ERROR
+  metadata:
+    owasp: A01
+
+- id: spring-missing-pre-post-authorize
+  pattern-inside: |
+    @RestController
+    class $C { ... }
+  pattern-not-inside: |
+    @PreAuthorize(...) ... @RestController
+  message: "A01:NoMethodAuthz – Consider @PreAuthorize or @Secured on sensitive endpoints"
+  languages: [java]
+  severity: WARNING
+  metadata:
+    owasp: A01
+
+# ---------- A02 Cryptographic Failures ----------
+- id: spring-hardcoded-secret-key
+  pattern-regex: |
+    ["']AES|DES|3DES|HmacSHA1|HmacMD5["']\s*\.\s*getBytes\s*\(\s*\)
+  message: "A02:HardcodedKey – Load keys from environment or vault"
+  languages: [java]
+  severity: ERROR
+  metadata:
+    owasp: A02
+
+- id: spring-md5-or-sha1
+  pattern-either:
+    - pattern: MessageDigest.getInstance("MD5")
+    - pattern: MessageDigest.getInstance("SHA-1")
+  message: "A02:WeakHash – Use SHA-256 or stronger"
+  languages: [java]
+  severity: ERROR
+  metadata:
+    owasp: A02
+
+# ---------- A03 Injection ----------
+- id: spring-statement-concat
+  pattern: |
+    Statement $S = $CONN.createStatement();
+    $S.executeQuery("..." + $X);
+  message: "A03:SQLi – Use PreparedStatement instead of string concat"
+  languages: [java]
+  severity: ERROR
+  metadata:
+    owasp: A03
+
+- id: spring-like-jpql
+  pattern: |
+    @Query("select ... where ... like '%' || $X || '%'")
+  message: "A03:JPQLi – LIKE with concat allows injection; use SPEL or parameter"
+  languages: [java]
+  severity: ERROR
+  metadata:
+    owasp: A03
+
+# ---------- A04 Insecure Design ----------
+- id: spring-actuator-exposed
+  pattern: management.endpoints.web.exposure.include=*
+  message: "A04:ActuatorOverExposure – List only health,info; secure the rest"
+  languages: [generic]
+  severity: WARNING
+  metadata:
+    owasp: A04
+
+# ---------- A05 Security Misconfiguration ----------
+- id: spring-csrf-disabled
+  pattern: .csrf().disable()
+  message: "A05:CSRFDisabled – Re-enable or document exception"
+  languages: [java]
+  severity: ERROR
+  metadata:
+    owasp: A05
+
+- id: spring-cors-allow-all
+  pattern: .cors().configurationSource(...allowedOrigins("*")...)
+  message: "A05:CorsWildcard – Use explicit origin list"
+  languages: [java]
+  severity: WARNING
+  metadata:
+    owasp: A05
+
+# ---------- A06 Vulnerable Components ----------
+- id: spring-http-cdn-asset
+  pattern-regex: |
+    src=["']http://[^"']*bootstrap|jquery|fontawesome[^"']*
+  message: "A06:HttpCDN – Use https:// and add integrity="
+  languages: [generic]
+  severity: WARNING
+  metadata:
+    owasp: A06
+
+# ---------- A07 Identification & Authentication Failures ----------
+- id: spring-password-strength-bcrypt
+  pattern: |
+    NoOpPasswordEncoder.getInstance()
+  message: "A07:PlainPasswordEncoder – Use BCryptPasswordEncoder"
+  languages: [java]
+  severity: ERROR
+  metadata:
+    owasp: A07
+
+# ---------- A08 Software & Data Integrity ----------
+- id: spring-missing-integrity-script
+  pattern-regex: |
+    <script src=["']https?://[^"']+["'][^>]*>(?!.*integrity)
+  message: "A08:MissingSRI – Add integrity=sha384-… to external script"
+  languages: [generic]
+  severity: ERROR
+  metadata:
+    owasp: A08
+
+# ---------- A09 Logging & Monitoring Failures ----------
+- id: spring-print-stacktrace
+  pattern: |
+    e.printStackTrace();
+  message: "A09:StacktraceLeak – Use logger and mask sensitive data"
+  languages: [java]
+  severity: WARNING
+  metadata:
+    owasp: A09
+
+# ---------- A10 Server-Side Request Forgery ----------
+- id: spring-resttemplate-url-concat
+  pattern: |
+    restTemplate.getForObject("http://"+$IP+..., ...)
+  message: "A10:SSRF – Validate or whitelist IP/URL before call"
+  languages: [java]
+  severity: ERROR
+  metadata:
+    owasp: A10
