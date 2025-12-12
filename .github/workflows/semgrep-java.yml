@@ -1,112 +1,80 @@
-name: Semgrep-Java-Spring-OWASP
+name: Semgrep (Spring OWASP)
 
 on:
   pull_request:
   push:
-    branches: [main, master]
+    branches: [ main, master ]
+  workflow_dispatch:
 
 jobs:
   semgrep:
     runs-on: ubuntu-latest
-    container:
-      image: semgrep/semgrep:latest
+    permissions:
+      contents: read
+      pull-requests: read
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Run Semgrep (Spring OWASP rules) and save outputs
-        run: |
-          set -euo pipefail
-
-          echo "🔍 Running Semgrep Spring OWASP rules..."
-          semgrep \
-            --config .semgrep/java-spring-owasp.yml \
-            --json --output semgrep.json \
-            --sarif --output semgrep.sarif \
-            --verbose || true
-
-          echo ""
-          echo "=== Findings (file:line:col | rule | severity | message) ==="
-
-          # Print a stable, readable summary from JSON:
-          # - file path
-          # - start line/col
-          # - rule id
-          # - severity
-          # - message
-          python3 - << 'PY'
-          import json, sys, os
-
-          p = "semgrep.json"
-          if not os.path.exists(p):
-            print("No semgrep.json produced.")
-            sys.exit(0)
-
-          data = json.load(open(p, "r", encoding="utf-8"))
-          results = data.get("results", []) or []
-
-          if not results:
-            print("✅ No findings.")
-            sys.exit(0)
-
-          # Sort by file then line
-          def key(r):
-            path = r.get("path","")
-            start = (r.get("start") or {})
-            return (path, start.get("line", 0), start.get("col", 0))
-
-          results.sort(key=key)
-
-          for r in results:
-            path = r.get("path","<unknown>")
-            start = r.get("start") or {}
-            end = r.get("end") or {}
-            line = start.get("line","?")
-            col = start.get("col","?")
-            eline = end.get("line","?")
-            ecol = end.get("col","?")
-
-            check_id = r.get("check_id","<no_rule_id>")
-            extra = r.get("extra") or {}
-            sev = (extra.get("severity") or "INFO").upper()
-            msg = (extra.get("message") or "").strip().replace("\n", " ")
-
-            print(f"- {path}:{line}:{col}-{eline}:{ecol} | {check_id} | {sev} | {msg}")
-
-            # Show matched code (if present)
-            lines = extra.get("lines")
-            if lines:
-              print("  Match:")
-              for L in lines.rstrip("\n").splitlines():
-                print("    " + L)
-            print()
-          PY
-
-          echo "=== Raw Semgrep text output (for extra context) ==="
-          # Some versions print nicer snippets in text mode
-          semgrep --config .semgrep/java-spring-owasp.yml --text --verbose || true
-
-          # Fail the job only if there are ERROR severity findings
-          echo "=== Enforcing: fail only if ERROR findings exist ==="
-          python3 - << 'PY'
-          import json, sys
-          data = json.load(open("semgrep.json","r", encoding="utf-8"))
-          results = data.get("results", []) or []
-          has_error = False
-          for r in results:
-            sev = ((r.get("extra") or {}).get("severity") or "").upper()
-            if sev == "ERROR":
-              has_error = True
-              break
-          if has_error:
-            print("❌ ERROR findings detected.")
-            sys.exit(1)
-          print("✅ No ERROR findings detected.")
-          PY
-
-      - name: Upload SARIF (GitHub Code Scanning)
-        uses: github/codeql-action/upload-sarif@v3
-        if: always()
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          sarif_file: semgrep.sarif
+          python-version: "3.x"
+
+      - name: Install Semgrep
+        run: |
+          python -m pip install --upgrade pip
+          pip install semgrep
+
+      # Run only your custom rules to keep signal high.
+      - name: Run Semgrep (custom Spring rules)
+        run: |
+          semgrep \
+            --config .semgrep/spring-owasp-springmvc.yml \
+            --metrics=off \
+            --error \
+            --json \
+            --output semgrep-results.json
+
+      # Optional: human-readable output in CI logs (does not affect pass/fail)
+      - name: Print summary
+        if: always()
+        run: |
+          echo "=== Semgrep summary ==="
+          python - << 'PY'
+          import json
+          p="semgrep-results.json"
+          try:
+            data=json.load(open(p))
+          except Exception as e:
+            print("Could not read semgrep-results.json:", e)
+            raise SystemExit(0)
+
+          results=data.get("results", [])
+          by_sev={}
+          for r in results:
+            sev=r.get("extra", {}).get("severity", "UNKNOWN")
+            by_sev[sev]=by_sev.get(sev,0)+1
+
+          print("Findings:", len(results))
+          for k in sorted(by_sev.keys()):
+            print(f"  {k}: {by_sev[k]}")
+
+          # Print a compact list (rule id + file:line + message)
+          for r in results[:50]:
+            path=r.get("path")
+            start=r.get("start", {}).get("line")
+            rid=r.get("check_id")
+            msg=r.get("extra", {}).get("message","").splitlines()[0]
+            print(f"- {rid} @ {path}:{start} — {msg}")
+          if len(results) > 50:
+            print(f"... ({len(results)-50} more)")
+          PY
+
+      - name: Upload results artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: semgrep-results
+          path: semgrep-results.json
