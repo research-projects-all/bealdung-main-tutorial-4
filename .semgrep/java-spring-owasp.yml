@@ -1,22 +1,22 @@
 rules:
   # ============================================================
-  # OWASP-aligned Spring rules (tuned to reduce false positives)
+  # Spring Boot / Spring MVC — OWASP-aligned custom rules
   #
-  # Key idea:
-  # - Use taint mode where possible so we only flag flows from
-  #   request-derived sources -> dangerous sinks.
-  #
-  # OWASP refs (high level):
-  # - Injection Prevention in Java (SQL/JPA/OS/XPath) and XSS, Log Injection:
-  #   OWASP Java Security Cheat Sheet.
-  # - Mass Assignment: OWASP Mass Assignment Cheat Sheet.
-  # - Bean Validation: OWASP Bean Validation Cheat Sheet.
+  # Design goals:
+  # - Use taint mode for “real vulnerability” rules to reduce false positives:
+  #     request-derived sources -> high-risk sinks.
+  # - Keep best-practice guidance rules as WARNING/INFO.
+  # - Exclude tests by default to avoid tutorial scaffolding noise.
   # ============================================================
 
   # ------------------------------------------------------------
-  # A) SQL Injection (JDBC): request data -> Statement.execute*(String)
-  # OWASP: use query parameterization / PreparedStatement instead of building SQL strings.
-  # This flags only when request-derived data can reach Statement.executeQuery/executeUpdate/execute.
+  # OWASP Top 10:2021 — A03 Injection
+  # https://owasp.org/Top10/2021/A03_2021-Injection/
+  # Reference: OWASP Java Security Cheat Sheet (SQL injection prevention)
+  # https://cheatsheetseries.owasp.org/cheatsheets/Java_Security_Cheat_Sheet.html
+  #
+  # JDBC SQL injection: request-derived data reaches Statement.execute*(String).
+  # Prefer PreparedStatement with placeholders and setXxx() parameterization.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-SQLI-JDBC-STATEMENT
     message: >
@@ -27,25 +27,18 @@ rules:
     mode: taint
     metadata:
       category: security
+      owasp_top10_2021: "A03:2021 Injection"
       cwe: "CWE-89"
-      owasp: "A03:2021 Injection"
       confidence: high
       framework: [spring, spring-mvc, spring-boot]
     paths:
-      include:
-        - "**/*.java"
-      exclude:
-        - "**/test/**"
-        - "**/*Test.java"
-        - ".semgrep/**"
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
     pattern-sources:
-      # Spring MVC / Spring Web common sources
       - pattern: $REQ.getParameter(...)
       - pattern: $REQ.getHeader(...)
       - pattern: $REQ.getQueryString()
-      - pattern: $REQ.getCookies()
       - pattern: $REQ.getPathInfo()
-      # Annotations (best-effort): treat directly-read params as sources when assigned
       - pattern: |
           @RequestParam(...) $T $X
       - pattern: |
@@ -55,13 +48,17 @@ rules:
       - pattern: $STMT.executeUpdate($SQL)
       - pattern: $STMT.execute($SQL)
     pattern-sanitizers:
-      # If you already use placeholders with PreparedStatement, this rule won't trigger.
-      # (We also treat simple allowlist validation as a sanitizer to reduce noise.)
+      # Treat allowlist validation as sanitizer to reduce FPs (still review).
       - pattern: java.util.regex.Pattern.matches($RE, $X)
 
   # ------------------------------------------------------------
-  # B) SQL Injection (JPA): request data -> entityManager.createQuery/createNativeQuery(String)
-  # OWASP: use parameterized JPQL (named params) rather than concatenated query strings.
+  # OWASP Top 10:2021 — A03 Injection
+  # https://owasp.org/Top10/2021/A03_2021-Injection/
+  # Reference: OWASP Java Security Cheat Sheet (JPA query parameterization)
+  # https://cheatsheetseries.owasp.org/cheatsheets/Java_Security_Cheat_Sheet.html
+  #
+  # JPA injection: request-derived data reaches createQuery/createNativeQuery with a dynamic string.
+  # Prefer parameterized JPQL (:name) / Criteria API.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-SQLI-JPA-QUERYSTRING
     message: >
@@ -72,8 +69,8 @@ rules:
     mode: taint
     metadata:
       category: security
+      owasp_top10_2021: "A03:2021 Injection"
       cwe: "CWE-89"
-      owasp: "A03:2021 Injection"
       confidence: high
       framework: [spring, jpa]
     paths:
@@ -94,8 +91,13 @@ rules:
       - pattern: java.util.regex.Pattern.matches($RE, $X)
 
   # ------------------------------------------------------------
-  # C) OS Command Injection: request data -> Runtime.exec / ProcessBuilder
-  # OWASP: use stack APIs instead of building OS commands.
+  # OWASP Top 10:2021 — A03 Injection
+  # https://owasp.org/Top10/2021/A03_2021-Injection/
+  # Reference: OWASP Java Security Cheat Sheet (OS command injection prevention)
+  # https://cheatsheetseries.owasp.org/cheatsheets/Java_Security_Cheat_Sheet.html
+  #
+  # OS Command Injection: request-derived data reaches Runtime.exec / ProcessBuilder.
+  # Prefer safe platform APIs or strict allowlist mapping to fixed commands.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-CMDI-EXEC
     message: >
@@ -106,8 +108,8 @@ rules:
     mode: taint
     metadata:
       category: security
+      owasp_top10_2021: "A03:2021 Injection"
       cwe: "CWE-78"
-      owasp: "A03:2021 Injection"
       confidence: high
       framework: [spring]
     paths:
@@ -125,12 +127,16 @@ rules:
       - pattern: (new ProcessBuilder($CMD, ...)).start()
       - pattern: (new ProcessBuilder($LIST)).start()
     pattern-sanitizers:
-      # Allowlist validation reduces FP (still review carefully)
       - pattern: java.util.regex.Pattern.matches($RE, $X)
 
   # ------------------------------------------------------------
-  # D) XPath Injection: request data -> XPath.compile/evaluate(String)
-  # OWASP: use XPathVariableResolver, avoid string-built XPath.
+  # OWASP Top 10:2021 — A03 Injection
+  # https://owasp.org/Top10/2021/A03_2021-Injection/
+  # Reference: OWASP Java Security Cheat Sheet (XPath injection prevention)
+  # https://cheatsheetseries.owasp.org/cheatsheets/Java_Security_Cheat_Sheet.html
+  #
+  # XPath Injection: request-derived data reaches XPath.compile/evaluate on dynamic expressions.
+  # Prefer XPathVariableResolver (variable binding).
   # ------------------------------------------------------------
   - id: SPRING-OWASP-XPATH-INJECTION
     message: >
@@ -141,8 +147,8 @@ rules:
     mode: taint
     metadata:
       category: security
+      owasp_top10_2021: "A03:2021 Injection"
       cwe: "CWE-643"
-      owasp: "A03:2021 Injection"
       confidence: high
       framework: [spring]
     paths:
@@ -162,24 +168,25 @@ rules:
       - pattern: java.util.regex.Pattern.matches($RE, $X)
 
   # ------------------------------------------------------------
-  # E) Reflected XSS (Spring MVC): request data -> returned body without encoding
-  # OWASP: encode/sanitize output; use OWASP Java Encoder or Spring HtmlUtils where appropriate.
+  # OWASP Top 10:2021 — A03 Injection (XSS)
+  # https://owasp.org/Top10/2021/A03_2021-Injection/
+  # Reference: OWASP Java Security Cheat Sheet (XSS: encode/sanitize output)
+  # https://cheatsheetseries.owasp.org/cheatsheets/Java_Security_Cheat_Sheet.html
   #
-  # Reduced FP approach:
-  # - Only triggers when request-derived data flows into a return value in a @ResponseBody method
-  #   or a RestController handler returning String/ResponseEntity<String>.
+  # Reflected XSS: request-derived data returned as response body without encoding/sanitization.
+  # Sanitizers: OWASP Java Encoder / Spring HtmlUtils / OWASP Java HTML Sanitizer.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-XSS-REFLECTED-RAW-RESPONSE
     message: >
       Possible reflected XSS: request-derived data is returned in an HTTP response without encoding/sanitization.
-      Encode (e.g., OWASP Java Encoder) or escape (e.g., Spring HtmlUtils) or sanitize HTML when HTML is intended.
+      Encode/escape (OWASP Java Encoder / Spring HtmlUtils) or sanitize HTML when HTML is intended.
     severity: ERROR
     languages: [java]
     mode: taint
     metadata:
       category: security
+      owasp_top10_2021: "A03:2021 Injection"
       cwe: "CWE-79"
-      owasp: "A03:2021 Injection"
       confidence: medium
       framework: [spring-mvc, spring-boot]
     paths:
@@ -192,36 +199,38 @@ rules:
       - pattern: |
           @PathVariable(...) $T $X
     pattern-sinks:
-      # Sink 1: returning tainted string directly
       - patterns:
           - pattern-inside: |
               @ResponseBody
               $RET $M(...){ ... }
           - pattern: return $X;
-      # Sink 2: ResponseEntity<String> carrying tainted data
       - pattern: org.springframework.http.ResponseEntity.ok($X)
       - pattern: org.springframework.http.ResponseEntity.status(...).body($X)
     pattern-sanitizers:
-      # Common output-encoding/sanitization options (treat as sanitizers to reduce FPs)
       - pattern: org.owasp.encoder.Encode.forHtml($X)
       - pattern: org.owasp.encoder.Encode.forHtmlAttribute($X)
       - pattern: org.owasp.encoder.Encode.forJavaScript($X)
       - pattern: org.springframework.web.util.HtmlUtils.htmlEscape($X)
-      - pattern: $POLICY.sanitize($X)   # OWASP Java HTML Sanitizer PolicyFactory.sanitize(...)
+      - pattern: $POLICY.sanitize($X)
 
   # ------------------------------------------------------------
-  # F) Log Injection / unsafe logging: discourage string concatenation in logger calls
-  # OWASP: use parameterized logging, avoid mixing concatenation + {} templates.
-  # Kept as WARNING to reduce friction; this is often noisy in legacy code.
+  # OWASP Top 10:2021 — A09 Security Logging and Monitoring Failures (related safe logging)
+  # https://owasp.org/Top10/2021/A09_2021-Security_Logging_and_Monitoring_Failures/
+  # Reference: OWASP Java Security Cheat Sheet (Log Injection guidance)
+  # https://cheatsheetseries.owasp.org/cheatsheets/Java_Security_Cheat_Sheet.html
+  #
+  # Unsafe logging pattern: string concatenation in logger calls.
+  # Kept as WARNING (can be noisy in tutorials).
   # ------------------------------------------------------------
   - id: SPRING-OWASP-LOG-INJECTION-CONCAT
     message: >
       Unsafe logging pattern: string concatenation inside logger call.
-      Prefer parameterized logging (e.g., logger.warn("msg {}", value)) to reduce injection/confusion risks.
+      Prefer parameterized logging (e.g., logger.warn("msg {}", value)).
     severity: WARNING
     languages: [java]
     metadata:
       category: security
+      owasp_top10_2021: "A09:2021 Security Logging and Monitoring Failures"
       cwe: "CWE-117"
       confidence: medium
       framework: [spring]
@@ -236,20 +245,23 @@ rules:
       - pattern: $LOG.trace($S + $X, ...)
 
   # ------------------------------------------------------------
-  # G) Mass Assignment (heuristic): binding request body directly into persistence-looking types
-  # OWASP: avoid binding user input directly to domain objects; prefer DTOs or explicit allowlists.
+  # OWASP Top 10:2021 — A04 Insecure Design (mass assignment missing control)
+  # https://owasp.org/Top10/2021/A04_2021-Insecure_Design/
+  # Reference: OWASP Mass Assignment Cheat Sheet
+  # https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html
   #
-  # This is intentionally WARNING + heuristic to avoid lots of false positives.
-  # You can tighten paths to your own domain packages (recommended).
+  # Heuristic: @RequestBody binds directly into a domain/entity-looking type.
+  # WARNING + low confidence to avoid over-flagging.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-MASS-ASSIGNMENT-REQUESTBODY-DOMAIN
     message: >
       Potential mass assignment risk: @RequestBody binds directly into a domain/entity-looking type.
-      Prefer DTOs (only editable fields) or explicit binding allowlists via @InitBinder setAllowedFields.
+      Prefer DTOs or explicit allowlisting via @InitBinder setAllowedFields.
     severity: WARNING
     languages: [java]
     metadata:
       category: security
+      owasp_top10_2021: "A04:2021 Insecure Design"
       cwe: "CWE-915"
       confidence: low
       framework: [spring-mvc, spring-boot]
@@ -261,17 +273,16 @@ rules:
           public $RET $M(..., @RequestBody $T $X, ...){ ... }
       - metavariable-regex:
           metavariable: $T
-          # Heuristic: common naming conventions
           regex: ".*(Entity|Model|Domain|User|Account|Admin|Profile).*"
 
   # ------------------------------------------------------------
-  # H) Bean Validation (best-practice): missing @Valid on request models
-  # OWASP: use Jakarta Bean Validation constraints + @Valid to trigger validation at controller boundary.
+  # OWASP Top 10:2021 — A03 Injection (input validation as prevention control)
+  # https://owasp.org/Top10/2021/A03_2021-Injection/
+  # Reference: OWASP Bean Validation Cheat Sheet
+  # https://cheatsheetseries.owasp.org/cheatsheets/Bean_Validation_Cheat_Sheet.html
   #
-  # This flags only if:
-  # - handler takes @RequestBody, and
-  # - parameter is NOT annotated with @Valid or @Validated.
-  # Kept as WARNING.
+  # Missing @Valid/@Validated on @RequestBody (boundary validation).
+  # WARNING (best-practice; avoids breaking CI on tutorials).
   # ------------------------------------------------------------
   - id: SPRING-OWASP-BEAN-VALIDATION-MISSING-VALID
     message: >
@@ -281,6 +292,7 @@ rules:
     languages: [java]
     metadata:
       category: security
+      owasp_top10_2021: "A03:2021 Injection"
       cwe: "CWE-20"
       confidence: medium
       framework: [spring]
@@ -294,3 +306,241 @@ rules:
           public $RET $M(..., @Valid @RequestBody $T $X, ...){ ... }
       - pattern-not: |
           public $RET $M(..., @Validated @RequestBody $T $X, ...){ ... }
+
+  # ============================================================
+  # Missing rules added from OWASP material you pasted
+  # ============================================================
+
+  # ------------------------------------------------------------
+  # OWASP Top 10:2021 — A10 SSRF
+  # https://owasp.org/Top10/2021/A10_2021-Server-Side_Request_Forgery_%28SSRF%29/
+  # Reference: OWASP SSRF Prevention Cheat Sheet
+  # https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html
+  #
+  # SSRF: request-derived URL reaches outbound HTTP clients.
+  # Taint-mode + narrow sinks to reduce false positives.
+  # ------------------------------------------------------------
+  - id: SPRING-OWASP-SSRF-HTTPCLIENT-TAINT
+    message: >
+      Possible SSRF: request-derived URL reaches an outbound HTTP client call.
+      Prefer allowlisting hosts/schemes, or map identifiers to fixed URLs.
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    metadata:
+      category: security
+      owasp_top10_2021: "A10:2021 SSRF"
+      cwe: "CWE-918"
+      confidence: medium
+      framework: [spring, spring-boot]
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+    pattern-sources:
+      - pattern: $REQ.getParameter(...)
+      - pattern: $REQ.getHeader(...)
+      - pattern: |
+          @RequestParam(...) $T $X
+      - pattern: |
+          @PathVariable(...) $T $X
+    pattern-sinks:
+      - pattern: $RT.getForObject($URL, ...)
+      - pattern: $RT.getForEntity($URL, ...)
+      - pattern: $RT.exchange($URL, ...)
+      - pattern: $WEBCLIENT.get().uri($URL).retrieve()
+      - pattern: $WEBCLIENT.post().uri($URL).retrieve()
+      - pattern: java.net.URI.create($URL)
+    pattern-sanitizers:
+      # Treat explicit allowlist checks as sanitizers (cuts false positives).
+      - pattern: $ALLOWED.contains($HOST)
+      - pattern: $URI.getHost()
+
+  # ------------------------------------------------------------
+  # OWASP Top 10:2021 — A01 Broken Access Control (CSRF)
+  # https://owasp.org/Top10/2021/A01_2021-Broken_Access_Control/
+  # Reference: OWASP CSRF Prevention Cheat Sheet
+  # https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html
+  #
+  # CSRF disabled in Spring Security.
+  # ------------------------------------------------------------
+  - id: SPRING-OWASP-CSRF-DISABLED
+    message: >
+      CSRF protection appears disabled. Avoid disabling CSRF for browser-facing apps.
+      If this is an API-only service, document the rationale and ensure other controls exist.
+    severity: ERROR
+    languages: [java]
+    metadata:
+      category: security
+      owasp_top10_2021: "A01:2021 Broken Access Control"
+      cwe: "CWE-352"
+      confidence: high
+      framework: [spring-security]
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+    pattern-either:
+      - pattern: http.csrf().disable()
+      - pattern: $HTTP.csrf($C -> $C.disable())
+      - pattern: $HTTP.csrf(AbstractHttpConfigurer::disable)
+
+  # ------------------------------------------------------------
+  # OWASP Top 10:2021 — A03 Injection (XXE)
+  # https://owasp.org/Top10/2021/A03_2021-Injection/
+  # Reference: OWASP XXE Prevention Cheat Sheet
+  # https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html
+  #
+  # XXE hardening: DocumentBuilderFactory used to parse without disallowing DOCTYPE.
+  # Not taint-mode because XML sources vary; uses pattern-not-inside to reduce FPs.
+  # ------------------------------------------------------------
+  - id: SPRING-OWASP-XXE-UNHARDENED-DOCUMENTBUILDERFACTORY
+    message: >
+      Potential XXE risk: DocumentBuilderFactory used without disabling DTD/external entities.
+      Follow OWASP XXE hardening features before parsing untrusted XML.
+    severity: ERROR
+    languages: [java]
+    metadata:
+      category: security
+      owasp_top10_2021: "A03:2021 Injection"
+      cwe: "CWE-611"
+      confidence: medium
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+    patterns:
+      - pattern: |
+          $F = javax.xml.parsers.DocumentBuilderFactory.newInstance();
+          ...
+          $B = $F.newDocumentBuilder();
+          ...
+          $B.parse(...);
+      - pattern-not-inside: |
+          $F.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+
+  # ------------------------------------------------------------
+  # OWASP Top 10:2021 — A03 Injection (LDAP)
+  # https://owasp.org/Top10/2021/A03_2021-Injection/
+  # Reference: OWASP LDAP Injection Prevention Cheat Sheet
+  # https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html
+  #
+  # LDAP injection: request-derived input reaches LDAP filter strings.
+  # ------------------------------------------------------------
+  - id: SPRING-OWASP-LDAP-INJECTION-FILTERSTRING
+    message: >
+      Possible LDAP injection: request-derived input reaches LDAP filter string construction.
+      Use safe filter building/escaping per OWASP LDAP guidance.
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    metadata:
+      category: security
+      owasp_top10_2021: "A03:2021 Injection"
+      cwe: "CWE-90"
+      confidence: medium
+      framework: [spring-ldap]
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+    pattern-sources:
+      - pattern: $REQ.getParameter(...)
+      - pattern: |
+          @RequestParam(...) $T $X
+    pattern-sinks:
+      - pattern: $LDAP.search(..., $FILTER, ...)
+      - pattern: $LDAP.search($BASE, $FILTER, ...)
+      - pattern: $CTX.search(..., $FILTER)
+
+  # ------------------------------------------------------------
+  # OWASP Top 10:2021 — A03 Injection (NoSQL)
+  # https://owasp.org/Top10/2021/A03_2021-Injection/
+  # Reference: OWASP Java Security Cheat Sheet (NoSQL injection guidance)
+  # https://cheatsheetseries.owasp.org/cheatsheets/Java_Security_Cheat_Sheet.html
+  #
+  # NoSQL injection: request-derived input reaches string-based Mongo query parsing.
+  # Prefer Criteria/Query builder APIs and validate/allowlist inputs.
+  # ------------------------------------------------------------
+  - id: SPRING-OWASP-NOSQL-INJECTION-MONGO-BASICQUERY
+    message: >
+      Possible NoSQL injection: request-derived input reaches a Mongo string-based query (BasicQuery/JSON query string).
+      Prefer Criteria/Query builder APIs and validate/allowlist inputs.
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    metadata:
+      category: security
+      owasp_top10_2021: "A03:2021 Injection"
+      cwe: "CWE-943"
+      confidence: medium
+      framework: [spring-data-mongodb]
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+    pattern-sources:
+      - pattern: $REQ.getParameter(...)
+      - pattern: |
+          @RequestParam(...) $T $X
+      - pattern: |
+          @RequestBody $T $OBJ
+    pattern-sinks:
+      - pattern: new org.springframework.data.mongodb.core.query.BasicQuery($Q)
+      - pattern: org.bson.Document.parse($Q)
+
+  # ============================================================
+  # Positive / secure-by-default detection rules (INFO)
+  # These support your tutorial-quality analysis without inflating vuln counts.
+  # ============================================================
+
+  # ------------------------------------------------------------
+  # OWASP Top 10:2021 — A04 Insecure Design (presence of mitigation control)
+  # https://owasp.org/Top10/2021/A04_2021-Insecure_Design/
+  # Reference: OWASP Mass Assignment Cheat Sheet (Spring MVC allow-listing)
+  # https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html
+  #
+  # Detect: @InitBinder + setAllowedFields allowlist present.
+  # ------------------------------------------------------------
+  - id: POS-SPRING-MASSASSIGNMENT-INITBINDER-ALLOWLIST
+    message: >
+      Good practice: controller uses @InitBinder with setAllowedFields allowlist to mitigate mass assignment.
+    severity: INFO
+    languages: [java]
+    metadata:
+      category: best-practice
+      owasp_top10_2021: "A04:2021 Insecure Design"
+      confidence: high
+      kind: positive-rule
+      framework: [spring-mvc]
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+    patterns:
+      - pattern: |
+          @InitBinder
+          public void $M(org.springframework.web.bind.WebDataBinder $B, ...) {
+            ...
+            $B.setAllowedFields(...);
+            ...
+          }
+
+  # ------------------------------------------------------------
+  # OWASP Top 10:2021 — A03 Injection (input validation control)
+  # https://owasp.org/Top10/2021/A03_2021-Injection/
+  # Reference: OWASP Bean Validation Cheat Sheet
+  # https://cheatsheetseries.owasp.org/cheatsheets/Bean_Validation_Cheat_Sheet.html
+  #
+  # Detect: @Valid applied at controller boundary for @RequestBody models.
+  # ------------------------------------------------------------
+  - id: POS-SPRING-BEANVALIDATION-VALID-REQUESTBODY
+    message: >
+      Good practice: request model validated at controller boundary using @Valid.
+    severity: INFO
+    languages: [java]
+    metadata:
+      category: best-practice
+      owasp_top10_2021: "A03:2021 Injection"
+      confidence: high
+      kind: positive-rule
+      framework: [spring]
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", ".semgrep/**"]
+    pattern: |
+      public $RET $M(..., @Valid @RequestBody $T $X, ...){ ... }
