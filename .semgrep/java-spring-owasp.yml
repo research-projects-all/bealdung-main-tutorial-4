@@ -1,144 +1,182 @@
 rules:
+# ============================================================
+# OWASP Top 10 (2021) - Beginner Tutorial Ground-Truth (SPRING)
+# Focus: Spring Boot + Spring Security + common tutorial configs
+# ============================================================
 
-# ---------- A01 Broken Access Control ----------
-- id: spring-unrestricted-request-mapping
+# ------------------------------------------------------------
+# A05: Security Misconfiguration
+# ------------------------------------------------------------
+
+- id: OWASP-A05-SPRING-SECURITY-CSRF-DISABLED
+  message: "Spring Security CSRF disabled (csrf().disable()). Avoid in tutorials unless you explain safe alternatives."
+  severity: ERROR
+  languages: [java]
   pattern-either:
-    - pattern: |
-        @RequestMapping($PATH)
-        $RET $METHOD(..) { ... }
-    - pattern: |
-        @RequestMapping(value=$PATH)
-        $RET $METHOD(..) { ... }
-  message: "A01:UnrestrictedMapping – Add method={GET,POST,...} to avoid CSRF bypass"
-  languages: [java]
-  severity: ERROR
+    - pattern: http.csrf().disable()
+    - pattern: $HTTP.csrf().disable()
   metadata:
-    owasp: A01
+    owasp: "A05:2021-Security Misconfiguration"
+    framework: "spring"
 
-- id: spring-missing-pre-post-authorize
-  pattern-inside: |
-    @RestController
-    class $C { ... }
-  pattern-not-inside: |
-    @PreAuthorize(...) ... @RestController
-  message: "A01:NoMethodAuthz – Consider @PreAuthorize or @Secured on sensitive endpoints"
+- id: OWASP-A01-SPRING-PERMITALL-ANYREQUEST
+  message: "Broken access control risk: anyRequest().permitAll() makes all endpoints public."
+  severity: ERROR
   languages: [java]
+  pattern-either:
+    - pattern: $AUTH.anyRequest().permitAll()
+    - pattern: authorizeHttpRequests(...).anyRequest().permitAll()
+    - pattern: authorizeRequests(...).anyRequest().permitAll()
+  metadata:
+    owasp: "A01:2021-Broken Access Control"
+    framework: "spring"
+
+- id: OWASP-A01-SPRING-WEB-IGNORING
+  message: "Ignoring requests in WebSecurity can bypass the security filter chain; prefer authorization rules over ignoring."
+  severity: ERROR
+  languages: [java]
+  pattern-either:
+    - pattern: web.ignoring().antMatchers(...)
+    - pattern: web.ignoring().requestMatchers(...)
+  metadata:
+    owasp: "A01:2021-Broken Access Control"
+    framework: "spring"
+
+- id: OWASP-A05-SPRING-ACTUATOR-EXPOSE-ALL
+  message: "Actuator endpoints broadly exposed (include='*'); restrict exposure and secure endpoints."
+  severity: ERROR
+  languages: [generic]
+  paths:
+    include:
+      - "**/application.properties"
+      - "**/application.yml"
+      - "**/application.yaml"
+  pattern-either:
+    - pattern-regex: '(?m)^\s*management\.endpoints\.web\.exposure\.include\s*=\s*\*\s*$'
+    - pattern-regex: '(?m)^\s*management:\s*\n(\s+.*\n)*\s*endpoints:\s*\n(\s+.*\n)*\s*web:\s*\n(\s+.*\n)*\s*exposure:\s*\n(\s+.*\n)*\s*include:\s*["'']?\*["'']?\s*$'
+  metadata:
+    owasp: "A05:2021-Security Misconfiguration"
+    framework: "spring"
+
+- id: OWASP-A05-SPRING-H2-CONSOLE-ENABLED
+  message: "H2 console enabled (often left on in tutorials). Disable or restrict in non-local environments."
   severity: WARNING
+  languages: [generic]
+  paths:
+    include:
+      - "**/application.properties"
+      - "**/application.yml"
+      - "**/application.yaml"
+  pattern-either:
+    - pattern-regex: '(?m)^\s*spring\.h2\.console\.enabled\s*=\s*true\s*$'
+    - pattern-regex: '(?m)^\s*spring:\s*\n(\s+.*\n)*\s*h2:\s*\n(\s+.*\n)*\s*console:\s*\n(\s+.*\n)*\s*enabled:\s*true\s*$'
   metadata:
-    owasp: A01
+    owasp: "A05:2021-Security Misconfiguration"
+    framework: "spring"
 
-# ---------- A02 Cryptographic Failures ----------
-- id: spring-hardcoded-secret-key
-  pattern-regex: |
-    ["']AES|DES|3DES|HmacSHA1|HmacMD5["']\s*\.\s*getBytes\s*\(\s*\)
-  message: "A02:HardcodedKey – Load keys from environment or vault"
-  languages: [java]
+# ------------------------------------------------------------
+# A02: Cryptographic Failures
+# ------------------------------------------------------------
+
+- id: OWASP-A02-SPRING-INSECURE-HASH-MD5-SHA1
+  message: "Insecure hash (MD5/SHA1). Use SHA-256+ for hashing or a password encoder (bcrypt/argon2) for passwords."
   severity: ERROR
-  metadata:
-    owasp: A02
-
-- id: spring-md5-or-sha1
+  languages: [java]
   pattern-either:
     - pattern: MessageDigest.getInstance("MD5")
+    - pattern: MessageDigest.getInstance("SHA1")
     - pattern: MessageDigest.getInstance("SHA-1")
-  message: "A02:WeakHash – Use SHA-256 or stronger"
-  languages: [java]
-  severity: ERROR
   metadata:
-    owasp: A02
+    owasp: "A02:2021-Cryptographic Failures"
+    framework: "spring"
 
-# ---------- A03 Injection ----------
-- id: spring-statement-concat
-  pattern: |
-    Statement $S = $CONN.createStatement();
-    $S.executeQuery("..." + $X);
-  message: "A03:SQLi – Use PreparedStatement instead of string concat"
-  languages: [java]
+- id: OWASP-A02-SPRING-NOOP-PASSWORD-ENCODER
+  message: "NoOpPasswordEncoder stores passwords effectively in plaintext. Avoid in tutorials unless explicitly teaching what not to do."
   severity: ERROR
-  metadata:
-    owasp: A03
-
-- id: spring-like-jpql
-  pattern: |
-    @Query("select ... where ... like '%' || $X || '%'")
-  message: "A03:JPQLi – LIKE with concat allows injection; use SPEL or parameter"
   languages: [java]
-  severity: ERROR
+  pattern-either:
+    - pattern: NoOpPasswordEncoder.getInstance()
+    - pattern: new NoOpPasswordEncoder(...)
   metadata:
-    owasp: A03
+    owasp: "A02:2021-Cryptographic Failures"
+    framework: "spring"
 
-# ---------- A04 Insecure Design ----------
-- id: spring-actuator-exposed
-  pattern: management.endpoints.web.exposure.include=*
-  message: "A04:ActuatorOverExposure – List only health,info; secure the rest"
+# ------------------------------------------------------------
+# A07: Identification & Authentication Failures
+# ------------------------------------------------------------
+
+- id: OWASP-A07-SPRING-HARDCODED-CREDENTIALS
+  message: "Hardcoded credentials (username/password) in code. Use env vars/secrets and avoid committing test creds."
+  severity: ERROR
+  languages: [java]
+  pattern-either:
+    - pattern: .password("...")
+    - pattern: .username("...")
+    - pattern: setPassword("...")
+    - pattern: setUsername("...")
+  metadata:
+    owasp: "A07:2021-Identification and Authentication Failures"
+    framework: "spring"
+
+# ------------------------------------------------------------
+# A03: Injection (common tutorial patterns)
+# ------------------------------------------------------------
+
+- id: OWASP-A03-SPRING-SQL-CONCAT-QUERY
+  message: "Possible SQL injection: SQL query built via string concatenation."
+  severity: ERROR
+  languages: [java]
+  pattern-either:
+    - pattern: $S = "SELECT " + ...;
+    - pattern: $S = "INSERT " + ...;
+    - pattern: $S = "UPDATE " + ...;
+    - pattern: $S = "DELETE " + ...;
+    - pattern: $JDBC.query("SELECT " + ..., ...)
+    - pattern: $JDBC.update("INSERT " + ..., ...)
+  metadata:
+    owasp: "A03:2021-Injection"
+    framework: "spring"
+
+- id: OWASP-A03-SPRING-REFLECT-REQUESTPARAM-IN-RESPONSE
+  message: "Potential reflected XSS: response includes raw @RequestParam value (string concat)."
+  severity: ERROR
+  languages: [java]
+  patterns:
+    - pattern: |
+        $RET $M(..., @RequestParam $T $P, ...) {
+          ...
+          return ... + $P + ...;
+        }
+  metadata:
+    owasp: "A03:2021-Injection"
+    framework: "spring"
+
+# ------------------------------------------------------------
+# A10: SSRF (tutorial-style proxy endpoints)
+# ------------------------------------------------------------
+
+- id: OWASP-A10-SPRING-SSRF-RESTTEMPLATE-USERURL
+  message: "Possible SSRF: RestTemplate call uses user-controlled URL."
+  severity: ERROR
+  languages: [java]
+  pattern-either:
+    - pattern: $RT.getForObject($URL, ...)
+    - pattern: $RT.getForEntity($URL, ...)
+    - pattern: $RT.exchange($URL, ...)
+    - pattern: $RT.postForObject($URL, ...)
+  metadata:
+    owasp: "A10:2021-Server-Side Request Forgery (SSRF)"
+    framework: "spring"
+
+# ------------------------------------------------------------
+# A08: Software & Data Integrity Failures (Trojan Source)
+# ------------------------------------------------------------
+
+- id: OWASP-A08-TROJAN-SOURCE-BIDI
+  message: "Bidirectional Unicode control character detected (Trojan Source risk). Remove or justify."
+  severity: WARNING
   languages: [generic]
-  severity: WARNING
+  pattern-regex: '[\u202A-\u202E\u2066-\u2069\u200E\u200F]'
   metadata:
-    owasp: A04
-
-# ---------- A05 Security Misconfiguration ----------
-- id: spring-csrf-disabled
-  pattern: .csrf().disable()
-  message: "A05:CSRFDisabled – Re-enable or document exception"
-  languages: [java]
-  severity: ERROR
-  metadata:
-    owasp: A05
-
-- id: spring-cors-allow-all
-  pattern: .cors().configurationSource(...allowedOrigins("*")...)
-  message: "A05:CorsWildcard – Use explicit origin list"
-  languages: [java]
-  severity: WARNING
-  metadata:
-    owasp: A05
-
-# ---------- A06 Vulnerable Components ----------
-- id: spring-http-cdn-asset
-  pattern-regex: |
-    src=["']http://[^"']*bootstrap|jquery|fontawesome[^"']*
-  message: "A06:HttpCDN – Use https:// and add integrity="
-  languages: [generic]
-  severity: WARNING
-  metadata:
-    owasp: A06
-
-# ---------- A07 Identification & Authentication Failures ----------
-- id: spring-password-strength-bcrypt
-  pattern: |
-    NoOpPasswordEncoder.getInstance()
-  message: "A07:PlainPasswordEncoder – Use BCryptPasswordEncoder"
-  languages: [java]
-  severity: ERROR
-  metadata:
-    owasp: A07
-
-# ---------- A08 Software & Data Integrity ----------
-- id: spring-missing-integrity-script
-  pattern-regex: |
-    <script src=["']https?://[^"']+["'][^>]*>(?!.*integrity)
-  message: "A08:MissingSRI – Add integrity=sha384-… to external script"
-  languages: [generic]
-  severity: ERROR
-  metadata:
-    owasp: A08
-
-# ---------- A09 Logging & Monitoring Failures ----------
-- id: spring-print-stacktrace
-  pattern: |
-    e.printStackTrace();
-  message: "A09:StacktraceLeak – Use logger and mask sensitive data"
-  languages: [java]
-  severity: WARNING
-  metadata:
-    owasp: A09
-
-# ---------- A10 Server-Side Request Forgery ----------
-- id: spring-resttemplate-url-concat
-  pattern: |
-    restTemplate.getForObject("http://"+$IP+..., ...)
-  message: "A10:SSRF – Validate or whitelist IP/URL before call"
-  languages: [java]
-  severity: ERROR
-  metadata:
-    owasp: A10
+    owasp: "A08:2021-Software and Data Integrity Failures"
+    framework: "spring"
