@@ -622,7 +622,6 @@ rules:
 
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A01 Broken Access Control (CORS)
-  # FIXED: YAML indentation under pattern-either
   # ------------------------------------------------------------
   - id: SPRING-OWASP-CORS-PERMISSIVE
     message: >
@@ -714,13 +713,15 @@ rules:
       - pattern: $HTTP.csrf($C -> $C.disable())
       - pattern: $HTTP.csrf(AbstractHttpConfigurer::disable)
 
-  - id: SPRING-OWASP-ACTUATOR-EXPOSED
+  # ------------------------------------------------------------
+  # FIXED: properties is not supported -> use generic + split rules
+  # ------------------------------------------------------------
+  - id: SPRING-OWASP-ACTUATOR-EXPOSED-YAML
     message: >
-      Actuator endpoints exposed without authentication. Tutorials show /actuator/health and /actuator
-      endpoints publicly accessible. These expose sensitive application information. Secure with
-      Spring Security or disable in production.
+      Actuator endpoints exposed without authentication. Public actuator endpoints can expose
+      sensitive application information. Restrict exposure and require authentication in production.
     severity: ERROR
-    languages: [properties, yaml]
+    languages: [yaml]
     metadata:
       category: security
       owasp_top10_2021: "A01:2021 Broken Access Control"
@@ -730,15 +731,9 @@ rules:
       references:
         - "https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html#actuator.endpoints.security"
     paths:
-      include: ["**/application.properties", "**/application.yml", "**/application.yaml"]
+      include: ["**/application.yml", "**/application.yaml"]
       exclude: ["**/test/**", "**/.semgrep/**"]
     pattern-either:
-      # application.properties
-      - pattern: management.endpoints.web.exposure.include=*
-      - pattern: management.endpoints.web.exposure.include=health,info,metrics
-      - pattern: management.endpoints.enabled-by-default=true
-
-      # application.yml / application.yaml (common variants)
       - pattern: |
           management:
             endpoints:
@@ -749,7 +744,35 @@ rules:
           management:
             endpoints:
               enabled-by-default: true
+      - pattern: |
+          management:
+            endpoints:
+              web:
+                exposure:
+                  include:
+                    - "*"
 
+  - id: SPRING-OWASP-ACTUATOR-EXPOSED-PROPERTIES
+    message: >
+      Actuator endpoints exposed without authentication. Public actuator endpoints can expose
+      sensitive application information. Restrict exposure and require authentication in production.
+    severity: ERROR
+    languages: [generic]
+    metadata:
+      category: security
+      owasp_top10_2021: "A01:2021 Broken Access Control"
+      cwe: "CWE-200"
+      confidence: high
+      framework: [spring-boot]
+      references:
+        - "https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html#actuator.endpoints.security"
+    paths:
+      include: ["**/application.properties"]
+      exclude: ["**/test/**", "**/.semgrep/**"]
+    pattern-either:
+      - pattern: management.endpoints.web.exposure.include=*
+      - pattern: management.endpoints.web.exposure.include=health,info,metrics
+      - pattern: management.endpoints.enabled-by-default=true
 
   - id: SPRING-OWASP-TUTORIAL-HARDCODED-CREDS
     message: >
@@ -831,12 +854,15 @@ rules:
       - pattern: model.addAttribute($NAME, $X)
       - pattern: model.put($NAME, $X)
 
-  - id: SPRING-OWASP-HTTP-ONLY-CONFIG
+  # ------------------------------------------------------------
+  # FIXED: properties is not supported -> use generic + split rules
+  # ------------------------------------------------------------
+  - id: SPRING-OWASP-HTTP-ONLY-CONFIG-YAML
     message: >
-      TLS/SSL appears disabled (server.ssl.enabled=false). Tutorials may use HTTP for simplicity,
+      TLS/SSL appears disabled (server.ssl.enabled: false). Tutorials may use HTTP for simplicity,
       but production applications should use HTTPS (TLS) for secure communication.
     severity: WARNING
-    languages: [properties, yaml]
+    languages: [yaml]
     metadata:
       category: security
       owasp_top10_2021: "A02:2021 Cryptographic Failures"
@@ -846,15 +872,28 @@ rules:
       references:
         - "https://docs.spring.io/spring-boot/docs/current/reference/html/howto.html#howto.webserver.configure-ssl"
     paths:
-      include: ["**/application.properties", "**/application.yml", "**/application.yaml"]
+      include: ["**/application.yml", "**/application.yaml"]
       exclude: ["**/test/**", "**/.semgrep/**"]
-    pattern-either:
-      # application.properties
-      - pattern: server.ssl.enabled=false
+    pattern: |
+      server:
+        ssl:
+          enabled: false
 
-      # application.yml / application.yaml
-      - pattern: |
-          server:
-            ssl:
-              enabled: false
-
+  - id: SPRING-OWASP-HTTP-ONLY-CONFIG-PROPERTIES
+    message: >
+      TLS/SSL appears disabled (server.ssl.enabled=false). Tutorials may use HTTP for simplicity,
+      but production applications should use HTTPS (TLS) for secure communication.
+    severity: WARNING
+    languages: [generic]
+    metadata:
+      category: security
+      owasp_top10_2021: "A02:2021 Cryptographic Failures"
+      cwe: "CWE-319"
+      confidence: high
+      framework: [spring-boot]
+      references:
+        - "https://docs.spring.io/spring-boot/docs/current/reference/html/howto.html#howto.webserver.configure-ssl"
+    paths:
+      include: ["**/application.properties"]
+      exclude: ["**/test/**", "**/.semgrep/**"]
+    pattern: server.ssl.enabled=false
