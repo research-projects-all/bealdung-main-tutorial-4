@@ -27,17 +27,21 @@ jobs:
           python -m pip install --upgrade pip
           pip install semgrep
 
-      # Run only your custom rules to keep signal high.
+      - name: Validate Semgrep rules
+        run: |
+          semgrep validate --config .semgrep/spring-owasp-springmvc.yml
+
       - name: Run Semgrep (custom Spring rules)
         run: |
-          semgrep \
+          semgrep scan \
             --config .semgrep/spring-owasp-springmvc.yml \
             --metrics=off \
             --error \
+            --severity ERROR \
             --json \
-            --output semgrep-results.json
+            --output semgrep-results.json \
+            .
 
-      # Optional: human-readable output in CI logs (does not affect pass/fail)
       - name: Print summary
         if: always()
         run: |
@@ -50,18 +54,14 @@ jobs:
           except Exception as e:
             print("Could not read semgrep-results.json:", e)
             raise SystemExit(0)
-
           results=data.get("results", [])
           by_sev={}
           for r in results:
             sev=r.get("extra", {}).get("severity", "UNKNOWN")
             by_sev[sev]=by_sev.get(sev,0)+1
-
           print("Findings:", len(results))
           for k in sorted(by_sev.keys()):
             print(f"  {k}: {by_sev[k]}")
-
-          # Print a compact list (rule id + file:line + message)
           for r in results[:50]:
             path=r.get("path")
             start=r.get("start", {}).get("line")
