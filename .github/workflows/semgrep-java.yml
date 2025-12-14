@@ -1,550 +1,98 @@
-# .github/workflows/spring-boot-security.yml
-name: 🔒 Spring Boot Security Scan
+name: Semgrep (Spring Java)
 
 on:
   push:
-    branches: [ main, master, develop, security/* ]
+    branches: [ main, master, develop, "security/*" ]
     paths:
-      - '**.java'
-      - '**.properties'
-      - '**.yml'
-      - '**/pom.xml'
-      - '**/build.gradle'
-      - '.github/workflows/spring-boot-security.yml'
-      - 'requirements*.txt'
-  
+      - "**/*.java"
+      - "**/pom.xml"
+      - "**/build.gradle"
+      - "**/*.yml"
+      - "**/*.yaml"
+      - "**/*.properties"
+      - ".semgrep/**"
+      - ".github/workflows/semgrep-java.yml"
   pull_request:
     branches: [ main, master, develop ]
     paths:
-      - '**.java'
-      - '**.properties'
-      - '**.yml'
-      - '**/pom.xml'
-      - '**/build.gradle'
-      - '.github/workflows/spring-boot-security.yml'
-  
-  schedule:
-    # Run daily security scans at 3 AM UTC
-    - cron: '0 3 * * *'
-  
+      - "**/*.java"
+      - "**/pom.xml"
+      - "**/build.gradle"
+      - "**/*.yml"
+      - "**/*.yaml"
+      - "**/*.properties"
+      - ".semgrep/**"
+      - ".github/workflows/semgrep-java.yml"
   workflow_dispatch:
-    inputs:
-      scan_type:
-        description: 'Type of security scan'
-        required: true
-        default: 'full'
-        type: choice
-        options:
-          - 'full'
-          - 'quick'
-          - 'critical-only'
-          - 'config-only'
-      fail_on_findings:
-        description: 'Fail workflow if findings detected'
-        required: false
-        default: true
-        type: boolean
-      upload_sarif:
-        description: 'Upload results to GitHub Security tab'
-        required: false
-        default: true
-        type: boolean
-
-env:
-  JAVA_VERSION: '17'
-  SPRING_PROFILES_ACTIVE: 'test'
-  SEMGREP_APP_TOKEN: ${{ secrets.SEMGREP_APP_TOKEN }}
 
 jobs:
-  # =================================================================
-  # MAIN SECURITY SCAN - SPRING BOOT SPECIFIC
-  # =================================================================
-  spring-boot-security-scan:
-    name: 🛡️ Spring Boot Security Analysis
+  semgrep:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      security-events: write
-      actions: read
-      pull-requests: write
-    
-    steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Full history for better analysis
 
-      - name: 🐍 Setup Python
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.x"
 
-      - name: ☕ Setup Java
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
-          cache: maven
-
-      - name: 📦 Install Semgrep
+      - name: Install Semgrep + jq
         run: |
           python -m pip install --upgrade pip
           pip install semgrep
           semgrep --version
+          sudo apt-get update -y
+          sudo apt-get install -y jq
 
-      # -----------------------------------------------------------------
-      # DOWNLOAD & VALIDATE SECURITY RULES
-      # -----------------------------------------------------------------
-      - name: 📋 Download Spring Security Rules
+      - name: Validate rules
         run: |
-          mkdir -p .semgrep
-          
-          # Download the comprehensive Spring Boot security rules
-          echo "📥 Downloading Spring Boot security rules..."
-          curl -s https://raw.githubusercontent.com/your-org/spring-security-rules/main/spring-boot-security-complete.yml \
-            -o .semgrep/spring-owasp-springmvc.yml || \
-            echo "⚠️ Using fallback local rules"
-          
-          # Create custom project-specific rules if they exist
-          if [ -f ".semgrep/custom-spring-rules.yml" ]; then
-            echo "✅ Found custom Spring Boot rules"
-          fi
-
-      - name: ✅ Validate Semgrep Rules
-        run: |
-          echo "🔍 Validating Spring Boot security rules..."
+          test -s .semgrep/spring-owasp-springmvc.yml
           semgrep --validate --config .semgrep/spring-owasp-springmvc.yml
-          
-          if [ $? -eq 0 ]; then
-            echo "✅ Rules validation passed"
-          else
-            echo "❌ Rules validation failed - using backup minimal rules"
-            # Create minimal backup rules
-            cat > .semgrep/spring-owasp-springmvc.yml << 'EOF'
-rules:
-  - id: spring-basic-security
-    message: "Basic security check"
-    severity: ERROR
-    languages: [java]
-    pattern: $X.executeQuery(...)
-EOF
-          fi
 
-      # -----------------------------------------------------------------
-      # CONFIGURE SCAN PARAMETERS
-      # -----------------------------------------------------------------
-      - name: 🔧 Configure Scan Parameters
-        id: config
+      - name: Run Semgrep (logs only)
         run: |
-          SCAN_TYPE="${{ github.event.inputs.scan_type || 'full' }}"
-          FAIL_ON_FINDINGS="${{ github.event.inputs.fail_on_findings || 'true' }}"
-          UPLOAD_SARIF="${{ github.event.inputs.upload_sarif || 'true' }}"
-          
-          echo "scan_type=$SCAN_TYPE" >> $GITHUB_OUTPUT
-          echo "fail_on_findings=$FAIL_ON_FINDINGS" >> $GITHUB_OUTPUT
-          echo "upload_sarif=$UPLOAD_SARIF" >> $GITHUB_OUTPUT
-          
-          # Set scan timeout and inclusion patterns based on type
-          case $SCAN_TYPE in
-            'quick') 
-              TIMEOUT="300"
-              INCLUDE_PATTERNS="--include='**/src/main/java/**/*.java' --severity ERROR"
-              ;;
-            'critical-only') 
-              TIMEOUT="600" 
-              INCLUDE_PATTERNS="--include='**/src/main/java/**/*.java' --include='**/application.properties' --include='**/application.yml' --severity ERROR"
-              ;;
-            'config-only') 
-              TIMEOUT="300"
-              INCLUDE_PATTERNS="--include='**/application.properties' --include='**/application.yml' --include='**/pom.xml' --include='**/build.gradle'"
-              ;;
-            'full') 
-              TIMEOUT="900"
-              INCLUDE_PATTERNS="--include='**/*.java' --include='**/application.properties' --include='**/application.yml' --include='**/pom.xml' --include='**/build.gradle'"
-              ;;
-            *) 
-              TIMEOUT="600"
-              INCLUDE_PATTERNS="--include='**/*.java' --include='**/application.properties' --include='**/application.yml'"
-              ;;
-          esac
-          
-          echo "timeout=$TIMEOUT" >> $GITHUB_OUTPUT
-          echo "include_patterns=$INCLUDE_PATTERNS" >> $GITHUB_OUTPUT
+          set -euo pipefail
 
-      # -----------------------------------------------------------------
-      # RUN SEMGREP SECURITY SCAN
-      # -----------------------------------------------------------------
-      - name: 🔍 Run Semgrep Security Analysis
-        id: semgrep
-        continue-on-error: true
-        run: |
-          echo "🔍 Starting Spring Boot security scan (type: ${{ steps.config.outputs.scan_type }})"
-          
-          # Base Semgrep command
-          SEMGREP_CMD="semgrep scan \
+          echo "=== Semgrep scan start ==="
+          semgrep scan \
             --config .semgrep/spring-owasp-springmvc.yml \
             --metrics=off \
-            --error \
-            --json \
-            --output semgrep-results.json \
+            --no-git-ignore \
+            --json --output semgrep-results.json \
             --time \
-            --timeout ${{ steps.config.outputs.timeout }} \
-            ${{ steps.config.outputs.include_patterns }}"
-          
-          echo "Executing: $SEMGREP_CMD"
-          set -o pipefail
-          $SEMGREP_CMD 2>&1 | tee semgrep-output.log
-          
-          # Capture exit code and results
-          SEMGREP_EXIT_CODE=$?
-          echo "exit_code=$SEMGREP_EXIT_CODE" >> $GITHUB_OUTPUT
-          
-          # Parse results if file exists
-          if [ -f semgrep-results.json ]; then
-            FINDINGS_COUNT=$(jq '.results | length' semgrep-results.json 2>/dev/null || echo "0")
-            echo "findings_count=$FINDINGS_COUNT" >> $GITHUB_OUTPUT
-            
-            ERRORS_COUNT=$(jq '[.results[] | select(.extra.severity == "ERROR")] | length' semgrep-results.json 2>/dev/null || echo "0")
-            echo "errors_count=$ERRORS_COUNT" >> $GITHUB_OUTPUT
-            
-            WARNINGS_COUNT=$(jq '[.results[] | select(.extra.severity == "WARNING")] | length' semgrep-results.json 2>/dev/null || echo "0")
-            echo "warnings_count=$WARNINGS_COUNT" >> $GITHUB_OUTPUT
-            
-            # Extract top findings for summary
-            TOP_FINDINGS=$(jq -r '.results[:5] | .[] | "- **\\(.extra.severity)**: \\(.check_id) in `\\(.path):\\(.start.line)`"' semgrep-results.json 2>/dev/null || echo "")
-            echo "top_findings<<EOF" >> $GITHUB_OUTPUT
-            echo "$TOP_FINDINGS" >> $GITHUB_OUTPUT
-            echo "EOF" >> $GITHUB_OUTPUT
-          else
-            echo "findings_count=0" >> $GITHUB_OUTPUT
-            echo "errors_count=0" >> $GITHUB_OUTPUT
-            echo "warnings_count=0" >> $GITHUB_OUTPUT
-            echo "top_findings=" >> $GITHUB_OUTPUT
-          fi
+            --timeout 900 \
+            --include "**/*.java" \
+            --include "**/application.properties" \
+            --include "**/application.yml" \
+            --include "**/application.yaml" \
+            --include "**/pom.xml" \
+            --include "**/build.gradle"
 
-      # -----------------------------------------------------------------
-      # GENERATE COMPREHENSIVE SECURITY REPORT
-      # -----------------------------------------------------------------
-      - name: 📊 Generate Security Dashboard
-        if: always() && steps.semgrep.outcome != 'skipped'
-        run: |
-          echo "# 🔒 Spring Boot Security Scan Report" > $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "## 📋 Scan Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
-          echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **Total Findings** | ${{ steps.semgrep.outputs.findings_count }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **🔴 Critical Errors** | ${{ steps.semgrep.outputs.errors_count }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **🟡 Warnings** | ${{ steps.semgrep.outputs.warnings_count }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Scan Type** | ${{ steps.config.outputs.scan_type }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Exit Code** | ${{ steps.semgrep.outputs.exit_code }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| **Java Version** | ${{ env.JAVA_VERSION }} |" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          
-          # Add top findings if they exist
-          if [ "${{ steps.semgrep.outputs.findings_count }}" -gt 0 ] && [ -n "${{ steps.semgrep.outputs.top_findings }}" ]; then
-            echo "### 🔍 Top Security Findings" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "${{ steps.semgrep.outputs.top_findings }}" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            
-            if [ "${{ steps.semgrep.outputs.findings_count }}" -gt 5 ]; then
-              echo "*... and $(( ${{ steps.semgrep.outputs.findings_count }} - 5 )) more findings*" >> $GITHUB_STEP_SUMMARY
-              echo "" >> $GITHUB_STEP_SUMMARY
-            fi
-          fi
-          
-          # Add security recommendations
-          echo "### 🛡️ Security Recommendations" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          if [ "${{ steps.semgrep.outputs.errors_count }}" -gt 0 ]; then
-            echo "⚠️ **Critical Issues Found** - Please address these immediately:" >> $GITHUB_STEP_SUMMARY
-            echo "- Review SQL injection vulnerabilities" >> $GITHUB_STEP_SUMMARY
-            echo "- Fix missing authentication/authorization" >> $GITHUB_STEP_SUMMARY
-            echo "- Address CSRF protection issues" >> $GITHUB_STEP_SUMMARY
-            echo "- Validate all user inputs" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          if [ "${{ steps.semgrep.outputs.warnings_count }}" -gt 0 ]; then
-            echo "⚠️ **Security Warnings** - Consider addressing these:" >> $GITHUB_STEP_SUMMARY
-            echo "- Review configuration security settings" >> $GITHUB_STEP_SUMMARY
-            echo "- Check for hardcoded secrets" >> $GITHUB_STEP_SUMMARY
-            echo "- Validate error handling" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          fi
-          
-          echo "### 📚 Helpful Resources" >> $GITHUB_STEP_SUMMARY
-          echo "- [Spring Security Documentation](https://docs.spring.io/spring-security/reference/)" >> $GITHUB_STEP_SUMMARY
-          echo "- [OWASP Spring Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Spring_Security_Cheat_Sheet.html)" >> $GITHUB_STEP_SUMMARY
-          echo "- [Spring Boot Security Best Practices](https://spring.io/guides/gs/securing-web/)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "---" >> $GITHUB_STEP_SUMMARY
-          echo "**Generated**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_STEP_SUMMARY
-          echo "**Workflow**: ${{ github.workflow }}" >> $GITHUB_STEP_SUMMARY
-          echo "**Run ID**: ${{ github.run_id }}" >> $GITHUB_STEP_SUMMARY
+          echo ""
+          echo "=== Findings summary ==="
+          TOTAL=$(jq '.results | length' semgrep-results.json)
+          ERRORS=$(jq '[.results[] | select(.extra.severity=="ERROR")] | length' semgrep-results.json)
+          WARNINGS=$(jq '[.results[] | select(.extra.severity=="WARNING")] | length' semgrep-results.json)
+          INFOS=$(jq '[.results[] | select(.extra.severity=="INFO")] | length' semgrep-results.json)
 
-      # -----------------------------------------------------------------
-      # UPLOAD RESULTS ARTIFACTS
-      # -----------------------------------------------------------------
-      - name: 📤 Upload Security Results
-        if: always() && steps.semgrep.outcome != 'skipped'
-        uses: actions/upload-artifact@v4
-        with:
-          name: spring-boot-security-results
-          path: |
-            semgrep-results.json
-            semgrep-output.log
-          retention-days: 30
+          echo "Total:    $TOTAL"
+          echo "ERROR:    $ERRORS"
+          echo "WARNING:  $WARNINGS"
+          echo "INFO:     $INFOS"
 
-      # -----------------------------------------------------------------
-      # UPLOAD TO GITHUB SECURITY TAB
-      # -----------------------------------------------------------------
-      - name: 🚨 Upload to GitHub Security Tab
-        if: steps.semgrep.outputs.findings_count > 0 && steps.config.outputs.upload_sarif == 'true'
-        uses: github/codeql-action/upload-sarif@v3
-        continue-on-error: true
-        with:
-          sarif_file: semgrep-results.json
-          category: spring-boot-security
+          echo ""
+          echo "=== Findings (grouped) ==="
+          jq -r '
+            .results
+            | sort_by(.check_id, .path, .start.line)
+            | .[]
+            | "\(.extra.severity)\t\(.check_id)\t\(.path):\(.start.line)\t\(.extra.message)"
+          ' semgrep-results.json | sed 's/\t/ | /g' || true
 
-      # -----------------------------------------------------------------
-      # PR COMMENT WITH SECURITY FINDINGS
-      # -----------------------------------------------------------------
-      - name: 💬 Post PR Security Comment
-        if: github.event_name == 'pull_request' && steps.semgrep.outputs.findings_count > 0
-        uses: actions/github-script@v7
-        with:
-          script: |
-            const findingsCount = parseInt('${{ steps.semgrep.outputs.findings_count }}');
-            const errorsCount = parseInt('${{ steps.semgrep.outputs.errors_count }}');
-            const warningsCount = parseInt('${{ steps.semgrep.outputs.warnings_count }}');
-            const scanType = '${{ steps.config.outputs.scan_type }}';
-            
-            const status = errorsCount > 0 ? '❌ SECURITY ISSUES FOUND' : '⚠️ SECURITY WARNINGS';
-            const emoji = errorsCount > 0 ? '🚨' : '⚠️';
-            const color = errorsCount > 0 ? 'critical' : 'warning';
-            
-            const comment = `## ${emoji} Spring Boot Security Scan Results
-            
-            **Status**: ${status}
-            **Scan Type**: \`${scanType}\`
-            **Total Findings**: ${findingsCount}
-            - 🔴 **Critical Errors**: ${errorsCount}
-            - 🟡 **Warnings**: ${warningsCount}
-            
-            ### 🔍 Summary
-            ${errorsCount > 0 
-              ? '⚠️ **Critical security issues detected in your Spring Boot application!**' 
-              : '⚠️ **Security warnings found that should be addressed.**'
-            }
-            
-            ### 🛡️ Spring Boot Specific Issues to Review:
-            ${errorsCount > 0 ? `
-            - **SQL Injection vulnerabilities** - Check database queries
-            - **Missing authentication/authorization** - Secure your endpoints  
-            - **CSRF protection disabled** - Enable CSRF for browser-facing apps
-            - **Input validation missing** - Validate all user inputs
-            ` : ''}
-            
-            ${warningsCount > 0 ? `
-            ### ⚠️ Warnings to Consider:
-            - **Configuration security** - Review application.properties/yml
-            - **Hardcoded secrets** - Move sensitive data to environment variables
-            - **Error information disclosure** - Implement proper error handling
-            ` : ''}
-            
-            ### 📊 Detailed Results
-            Full security scan results are available in the [Actions artifacts](https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}).
-            
-            ### 🔧 Next Steps
-            1. **Download the full security report** from Actions artifacts
-            2. **Review each finding** and implement recommended fixes
-            3. **Re-run the security scan** after making changes
-            4. **Consider adding** Spring Security configuration if missing
-            
-            ### 📚 Spring Boot Security Resources
-            - [Spring Security Documentation](https://docs.spring.io/spring-security/reference/)
-            - [OWASP Spring Security Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Spring_Security_Cheat_Sheet.html)
-            - [Spring Boot Security Best Practices](https://spring.io/guides/gs/securing-web/)
-            
-            ---
-            *Generated by Spring Boot Security Scan - Workflow: \`${{ github.workflow }}\`*
-            `;
-            
-            github.rest.issues.createComment({
-              issue_number: context.issue.number,
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              body: comment
-            });
-
-      # -----------------------------------------------------------------
-      # FAIL WORKFLOW IF CONFIGURED
-      # -----------------------------------------------------------------
-      - name: ❌ Fail on Security Findings
-        if: steps.config.outputs.fail_on_findings == 'true' && steps.semgrep.outputs.errors_count > 0
-        run: |
-          echo "❌ Security scan failed with ${{ steps.semgrep.outputs.errors_count }} critical errors"
-          echo "🔍 Review the detailed results in the Security tab or download artifacts"
-          echo "💡 Fix the security issues and re-run the scan"
-          exit 1
-
-  # =================================================================
-  # SUPPLEMENTARY SECURITY CHECKS
-  # =================================================================
-  dependency-scan:
-    name: 📦 Dependency Security Check
-    runs-on: ubuntu-latest
-    needs: spring-boot-security-scan
-    if: always()
-    
-    steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: ☕ Setup Java
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
-
-      - name: 🔍 OWASP Dependency Check
-        uses: dependency-check/Dependency-Check_Action@main
-        with:
-          project: 'spring-boot-app'
-          path: '.'
-          format: 'JSON'
-          args: >
-            --enableRetired
-            --enableExperimental
-            --suppression dependency-check-suppressions.xml
-            
-      - name: 📊 Process Dependency Results
-        run: |
-          if [ -f dependency-check-report.json ]; then
-            VULN_COUNT=$(jq '.dependencies[] | select(.vulnerabilities != null) | .vulnerabilities | length' dependency-check-report.json | jq -s 'add // 0')
-            echo "Found $VULN_COUNT vulnerable dependencies"
-            
-            # Create summary for GitHub Security
-            echo "dependency_vulnerabilities=$VULN_COUNT" >> $GITHUB_ENV
-          else
-            echo "dependency_vulnerabilities=0" >> $GITHUB_ENV
-          fi
-
-      - name: 📤 Upload Dependency Results
-        uses: actions/upload-artifact@v4
-        with:
-          name: dependency-check-results
-          path: dependency-check-report.json
-          retention-days: 30
-
-  spring-boot-security-check:
-    name: 🔧 Spring Boot Security Check
-    runs-on: ubuntu-latest
-    needs: spring-boot-security-scan
-    if: always()
-    
-    steps:
-      - name: 📥 Checkout Repository
-        uses: actions/checkout@v4
-
-      - name: ☕ Setup Java
-        uses: actions/setup-java@v4
-        with:
-          java-version: ${{ env.JAVA_VERSION }}
-          distribution: 'temurin'
-
-      - name: 🔍 Spring Boot Security Validation
-        run: |
-          echo "🔍 Running Spring Boot security validation checks..."
-          
-          # Check application properties for security issues
-          find . -name "application.properties" -o -name "application.yml" | while read config_file; do
-            echo "Checking: $config_file"
-            
-            # Check for security issues
-            if grep -q "debug=true" "$config_file"; then
-              echo "⚠️ DEBUG mode enabled in $config_file"
-            fi
-            
-            if grep -q "management.endpoints.web.exposure.include=*" "$config_file"; then
-              echo "🚨 All actuator endpoints exposed in $config_file"
-            fi
-            
-            if grep -q "spring.h2.console.enabled=true" "$config_file"; then
-              echo "🚨 H2 console enabled in $config_file"
-            fi
-            
-            if grep -E "spring\.datasource\.password=|api\.key=|secret\.key=" "$config_file" | grep -v "ENC(" | grep -v "\{cipher}"; then
-              echo "🚨 Hardcoded secrets in $config_file"
-            fi
-          done
-          
-          # Create security check report
-          echo "Spring Boot security validation completed" > spring-boot-security-check.txt
-
-      - name: 📤 Upload Spring Boot Check Results
-        uses: actions/upload-artifact@v4
-        with:
-          name: spring-boot-security-check
-          path: spring-boot-security-check.txt
-          retention-days: 30
-
-  # =================================================================
-  # SECURITY METRICS AND REPORTING
-  # =================================================================
-  security-metrics:
-    name: 📈 Security Metrics & Reporting
-    runs-on: ubuntu-latest
-    needs: [spring-boot-security-scan, dependency-scan, spring-boot-security-check]
-    if: always()
-    
-    steps:
-      - name: 📥 Download All Security Results
-        uses: actions/download-artifact@v4
-        with:
-          path: security-results
-
-      - name: 📊 Generate Comprehensive Security Report
-        run: |
-          echo "# 🔒 Spring Boot Security Dashboard" > security-dashboard.md
-          echo "" >> security-dashboard.md
-          echo "## 📈 Executive Summary" >> security-dashboard.md
-          echo "" >> security-dashboard.md
-          
-          # Semgrep results
-          if [ -f security-results/spring-boot-security-results/semgrep-results.json ]; then
-            SEMGREP_COUNT=$(jq '.results | length' security-results/spring-boot-security-results/semgrep-results.json 2>/dev/null || echo "0")
-            echo "- **Semgrep Findings**: $SEMGREP_COUNT" >> security-dashboard.md
-          fi
-          
-          # Dependency check results
-          if [ -f security-results/dependency-check-results/dependency-check-report.json ]; then
-            DEP_COUNT=$(jq '[.dependencies[] | select(.vulnerabilities != null)] | length' security-results/dependency-check-results/dependency-check-report.json 2>/dev/null || echo "0")
-            echo "- **Vulnerable Dependencies**: $DEP_COUNT" >> security-dashboard.md
-          fi
-          
-          echo "" >> security-dashboard.md
-          echo "## 🕒 Generated" >> security-dashboard.md
-          echo "- **Date**: $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> security-dashboard.md
-          echo "- **Workflow**: ${{ github.workflow }}" >> security-dashboard.md
-          echo "- **Run ID**: ${{ github.run_id }}" >> security-dashboard.md
-          echo "- **Repository**: ${{ github.repository }}" >> security-dashboard.md
-
-      - name: 📤 Upload Security Dashboard
-        uses: actions/upload-artifact@v4
-        with:
-          name: spring-boot-security-dashboard
-          path: security-dashboard.md
-          retention-days: 90
-
-      # Final security status check
-      - name: 🎯 Final Security Status
-        run: |
-          echo "=== 🏁 Spring Boot Security Scan Complete ==="
-          echo "✅ All security checks have been completed"
-          echo "📊 Results available in workflow artifacts"
-          echo "🔍 Review findings in GitHub Security tab (if uploaded)"
-          echo "💡 Address critical issues before merging to main"
+          echo ""
+          echo "=== Semgrep scan end ==="
