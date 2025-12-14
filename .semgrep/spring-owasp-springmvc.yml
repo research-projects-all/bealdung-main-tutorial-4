@@ -797,11 +797,12 @@ rules:
       - pattern: password.equals("dummy")
       - pattern: $VAR.equalsIgnoreCase("admin")
       - pattern: $VAR.equals("password123")
-
+      
   - id: SPRING-OWASP-MISSING-AUTH-REST
     message: >
-      REST API endpoints lack authentication configuration. Tutorials show completely open endpoints
-      without any security. Implement Spring Security with proper authentication for all API endpoints.
+      REST API endpoints lack authentication/authorization. Tutorials show open endpoints without
+      any security. Implement Spring Security and protect endpoints (e.g., @PreAuthorize/@Secured or
+      request matcher rules).
     severity: ERROR
     languages: [java]
     metadata:
@@ -815,18 +816,50 @@ rules:
     paths:
       include: ["**/*.java"]
       exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
+
     patterns:
-      - pattern: |
+      # 1) We are inside a RestController class
+      - pattern-inside: |
           @RestController
           class $C {
-            @GetMapping(...)
-            public $RET $METHOD(...) {
-              ...
-            }
+            ...
+          }
+
+      # 2) We match a request handler method (any mapping)
+      - pattern-either:
+          - pattern: |
+              @$MAP(...)
+              public $RET $METH(...){
+                ...
+              }
+          - pattern: |
+              @$MAP(...)
+              public $RET $METH(...) {
+                ...
+              }
+
+      # 3) Exclude methods that already have method-level authz annotations
+      - pattern-not-inside: |
+          @PreAuthorize(...)
+          public $RET $METH(...){
+            ...
           }
       - pattern-not-inside: |
           @PreAuthorize(...)
-          $METHOD
+          public $RET $METH(...) {
+            ...
+          }
+      - pattern-not-inside: |
+          @Secured(...)
+          public $RET $METH(...){
+            ...
+          }
+      - pattern-not-inside: |
+          @Secured(...)
+          public $RET $METH(...) {
+            ...
+          }
+
 
   - id: SPRING-OWASP-XSS-THYMELEAF-UNSANITIZED
     message: >
