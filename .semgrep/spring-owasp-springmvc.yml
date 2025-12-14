@@ -113,7 +113,6 @@ rules:
 
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A03 Injection (Spring View Injection / SSTI)
-  # NEW RULE: Detects when user input determines the return view name.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-VIEW-INJECTION
     message: >
@@ -157,7 +156,6 @@ rules:
 
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A03 Injection (Spring Expression Language - SpEL)
-  # NEW RULE: Detects evaluation of SpEL expressions from user input.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-SPEL-INJECTION
     message: >
@@ -189,7 +187,6 @@ rules:
 
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A08 Software and Data Integrity Failures (Jackson Deserialization)
-  # NEW RULE: Detects unsafe Jackson configuration.
   # ------------------------------------------------------------
   - id: SPRING-OWASP-JACKSON-UNSAFE-TYPING
     message: >
@@ -401,7 +398,7 @@ rules:
       - pattern: $WEBCLIENT.post().uri($URL).retrieve()
       - pattern: java.net.URI.create($URL)
     pattern-sanitizers:
-      - pattern: $ALLOWED.contains($HOST)
+      - pattern: $ALLOWED.contains(...)
       - pattern: $URI.getHost()
 
   # ------------------------------------------------------------
@@ -519,7 +516,6 @@ rules:
 
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A01 Broken Access Control (Path Traversal)
-  # FIXED: Generalized sinks to catch string concatenation (e.g. "path/" + input)
   # ------------------------------------------------------------
   - id: SPRING-OWASP-PATH-TRAVERSAL-FILE
     message: >
@@ -626,6 +622,7 @@ rules:
 
   # ------------------------------------------------------------
   # OWASP Top 10:2021 — A01 Broken Access Control (CORS)
+  # FIXED: YAML indentation under pattern-either
   # ------------------------------------------------------------
   - id: SPRING-OWASP-CORS-PERMISSIVE
     message: >
@@ -646,9 +643,9 @@ rules:
       exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     patterns:
       - pattern-either:
-        - pattern: $REG.addMapping(...).allowedOrigins("*")
-        - pattern: |
-            @CrossOrigin(origins = "*")
+          - pattern: $REG.addMapping(...).allowedOrigins("*")
+          - pattern: |
+              @CrossOrigin(origins = "*")
 
   # ============================================================
   # Positive / secure-by-default detection rules (INFO)
@@ -719,8 +716,8 @@ rules:
 
   - id: SPRING-OWASP-ACTUATOR-EXPOSED
     message: >
-      Actuator endpoints exposed without authentication. Tutorials show /actuator/health and /actuator 
-      endpoints publicly accessible. These expose sensitive application information. Secure with 
+      Actuator endpoints exposed without authentication. Tutorials show /actuator/health and /actuator
+      endpoints publicly accessible. These expose sensitive application information. Secure with
       Spring Security or disable in production.
     severity: ERROR
     languages: [java]
@@ -741,8 +738,8 @@ rules:
 
   - id: SPRING-OWASP-TUTORIAL-HARDCODED-CREDS
     message: >
-      Tutorial shows hardcoded credentials in source code. Found "in28Minutes"/"dummy" credentials 
-      in multiple tutorials. Never store passwords in code. Use environment variables or secure 
+      Tutorial shows hardcoded credentials in source code. Found "in28Minutes"/"dummy" credentials
+      in multiple tutorials. Never store passwords in code. Use environment variables or secure
       configuration management.
     severity: ERROR
     languages: [java]
@@ -763,10 +760,9 @@ rules:
       - pattern: $VAR.equalsIgnoreCase("admin")
       - pattern: $VAR.equals("password123")
 
-
   - id: SPRING-OWASP-MISSING-AUTH-REST
     message: >
-      REST API endpoints lack authentication configuration. Tutorials show completely open endpoints 
+      REST API endpoints lack authentication configuration. Tutorials show completely open endpoints
       without any security. Implement Spring Security with proper authentication for all API endpoints.
     severity: ERROR
     languages: [java]
@@ -796,7 +792,7 @@ rules:
 
   - id: SPRING-OWASP-XSS-THYMELEAF-UNSANITIZED
     message: >
-      XSS vulnerability in Thymeleaf template. User input passed directly to template without 
+      XSS vulnerability in Thymeleaf template. User input passed directly to template without
       sanitization. Use th:text for automatic escaping or manually sanitize input.
     severity: ERROR
     languages: [java]
@@ -820,10 +816,9 @@ rules:
       - pattern: model.addAttribute($NAME, $X)
       - pattern: model.put($NAME, $X)
 
-
   - id: SPRING-OWASP-HTTP-ONLY-CONFIG
     message: >
-      Application configured for HTTP only. Tutorials use HTTP for simplicity but production 
+      Application configured for HTTP only. Tutorials use HTTP for simplicity but production
       applications must use HTTPS. Configure SSL/TLS for secure communication.
     severity: WARNING
     languages: [yaml, properties]
