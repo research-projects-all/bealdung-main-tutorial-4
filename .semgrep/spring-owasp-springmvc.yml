@@ -720,7 +720,7 @@ rules:
       endpoints publicly accessible. These expose sensitive application information. Secure with
       Spring Security or disable in production.
     severity: ERROR
-    languages: [java]
+    languages: [properties, yaml]
     metadata:
       category: security
       owasp_top10_2021: "A01:2021 Broken Access Control"
@@ -730,11 +730,26 @@ rules:
       references:
         - "https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html#actuator.endpoints.security"
     paths:
-      include: ["**/application.properties", "**/application.yml"]
+      include: ["**/application.properties", "**/application.yml", "**/application.yaml"]
+      exclude: ["**/test/**", "**/.semgrep/**"]
     pattern-either:
+      # application.properties
       - pattern: management.endpoints.web.exposure.include=*
       - pattern: management.endpoints.web.exposure.include=health,info,metrics
       - pattern: management.endpoints.enabled-by-default=true
+
+      # application.yml / application.yaml (common variants)
+      - pattern: |
+          management:
+            endpoints:
+              web:
+                exposure:
+                  include: "*"
+      - pattern: |
+          management:
+            endpoints:
+              enabled-by-default: true
+
 
   - id: SPRING-OWASP-TUTORIAL-HARDCODED-CREDS
     message: >
