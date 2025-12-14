@@ -1,12 +1,12 @@
+# spring-boot-comprehensive-security.yml
+# Comprehensive Spring Boot Security Rules - Enhanced with Spring-specific vulnerabilities
+# Updated: 2024-12-15
+
 rules:
   # ============================================================
-  # Spring Boot / Spring MVC — OWASP-aligned custom rules
-  # Updated: 2024-12-12
+  # SPRING BOOT - OWASP Top 10:2021 — A03 Injection (SQL - JDBC)
   # ============================================================
-
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection (SQL - JDBC)
-  # ------------------------------------------------------------
+  
   - id: SPRING-OWASP-SQLI-JDBC-STATEMENT
     message: >
       Possible SQL injection: request-derived data reaches JDBC Statement.execute*(String).
@@ -41,9 +41,10 @@ rules:
     pattern-sanitizers:
       - pattern: java.util.regex.Pattern.matches($RE, $X)
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection (SQL - JPA)
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A03 Injection (SQL - JPA/Spring Data)
+  # ============================================================
+  
   - id: SPRING-OWASP-SQLI-JPA-QUERYSTRING
     message: >
       Possible injection: request-derived data reaches JPA createQuery/createNativeQuery with a dynamic query string.
@@ -76,9 +77,50 @@ rules:
     pattern-sanitizers:
       - pattern: java.util.regex.Pattern.matches($RE, $X)
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection (OS Command)
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A03 Injection (SQL - Spring Data REST)
+  # ============================================================
+  
+  - id: SPRING-OWASP-SQLI-SPRING-DATA-REST
+    message: >
+      Possible SQL injection via Spring Data REST: exposed repositories without query method validation.
+      Validate custom query methods or use @Query with parameters instead of concatenation.
+    severity: ERROR
+    languages: [java]
+    metadata:
+      category: security
+      owasp_top10_2021: "A03:2021 Injection"
+      cwe: "CWE-89"
+      confidence: medium
+      framework: [spring-data, spring-data-rest]
+      references:
+        - "https://docs.spring.io/spring-data/rest/docs/current/reference/html/"
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
+    patterns:
+      - pattern: |
+          @RepositoryRestResource
+          interface $REPO extends JpaRepository<$ENTITY, $ID> {
+            @Query("..." + $VAR + "...")
+            ...
+          }
+      - pattern: |
+          @RepositoryRestResource
+          interface $REPO extends JpaRepository<$ENTITY, $ID> {
+            List<$ENTITY> findBy$FIELD($TYPE $VAR);
+          }
+      - pattern-not: |
+          @RepositoryRestResource
+          interface $REPO extends JpaRepository<$ENTITY, $ID> {
+            @Query("SELECT e FROM Entity e WHERE e.field = :param")
+            List<$ENTITY> findByField(@Param("param") String param);
+          }
+
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A03 Injection (OS Command)
+  # ============================================================
+  
   - id: SPRING-OWASP-CMDI-EXEC
     message: >
       Possible OS command injection: request-derived data reaches Runtime.exec / ProcessBuilder.
@@ -111,9 +153,10 @@ rules:
     pattern-sanitizers:
       - pattern: java.util.regex.Pattern.matches($RE, $X)
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection (Spring View Injection / SSTI)
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A03 Injection (Spring View Injection / SSTI)
+  # ============================================================
+  
   - id: SPRING-OWASP-VIEW-INJECTION
     message: >
       Possible Spring View Injection (SSTI): User input is returned directly as a View name.
@@ -154,9 +197,10 @@ rules:
               }
           - pattern: return $X;
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection (Spring Expression Language - SpEL)
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A03 Injection (Spring Expression Language - SpEL)
+  # ============================================================
+  
   - id: SPRING-OWASP-SPEL-INJECTION
     message: >
       Critical SpEL Injection: User input reaches ExpressionParser.parseExpression().
@@ -185,9 +229,10 @@ rules:
     pattern-sinks:
       - pattern: $PARSER.parseExpression(...)
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A08 Software and Data Integrity Failures (Jackson Deserialization)
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A08 Software and Data Integrity Failures (Jackson Deserialization)
+  # ============================================================
+  
   - id: SPRING-OWASP-JACKSON-UNSAFE-TYPING
     message: >
       Unsafe Jackson Configuration: enableDefaultTyping() (or similar) allows polymorphic deserialization.
@@ -210,9 +255,10 @@ rules:
       - pattern: $MAPPER.enableDefaultTyping(...)
       - pattern: $MAPPER.activateDefaultTyping(...)
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection (XPath)
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A03 Injection (XPath)
+  # ============================================================
+  
   - id: SPRING-OWASP-XPATH-INJECTION
     message: >
       Possible XPath injection: request-derived data reaches XPath.compile/evaluate with a dynamic expression.
@@ -242,9 +288,73 @@ rules:
     pattern-sanitizers:
       - pattern: java.util.regex.Pattern.matches($RE, $X)
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection (XSS Reflected)
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A03 Injection (LDAP)
+  # ============================================================
+  
+  - id: SPRING-OWASP-LDAP-INJECTION-FILTERSTRING
+    message: >
+      Possible LDAP injection: request-derived input reaches LDAP filter string construction.
+      Use safe filter building/escaping per OWASP LDAP guidance.
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    metadata:
+      category: security
+      owasp_top10_2021: "A03:2021 Injection"
+      cwe: "CWE-90"
+      confidence: medium
+      framework: [spring-ldap]
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html"
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
+    pattern-sources:
+      - pattern: $REQ.getParameter(...)
+      - pattern: |
+          @RequestParam(...) $T $X
+    pattern-sinks:
+      - pattern: $LDAP.search(..., $FILTER, ...)
+      - pattern: $LDAP.search($BASE, $FILTER, ...)
+      - pattern: $CTX.search(..., $FILTER)
+    pattern-sanitizers:
+      - pattern: $ALLOWED.contains($USER)
+
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A03 Injection (NoSQL - MongoDB)
+  # ============================================================
+  
+  - id: SPRING-OWASP-NOSQL-INJECTION-MONGO-BASICQUERY
+    message: >
+      Possible NoSQL injection: request-derived input reaches a Mongo string-based query.
+      Prefer Criteria/Query builder APIs and validate/allowlist inputs.
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    metadata:
+      category: security
+      owasp_top10_2021: "A03:2021 Injection"
+      cwe: "CWE-943"
+      confidence: medium
+      framework: [spring-data-mongodb]
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
+    pattern-sources:
+      - pattern: $REQ.getParameter(...)
+      - pattern: |
+          @RequestParam(...) $T $X
+      - pattern: |
+          @RequestBody $T $OBJ
+    pattern-sinks:
+      - pattern: new org.springframework.data.mongodb.core.query.BasicQuery($Q)
+      - pattern: org.bson.Document.parse($Q)
+
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A03 Injection (XSS Reflected)
+  # ============================================================
+  
   - id: SPRING-OWASP-XSS-REFLECTED-RAW-RESPONSE
     message: >
       Possible reflected XSS: request-derived data is returned in an HTTP response without encoding/sanitization.
@@ -284,9 +394,10 @@ rules:
       - pattern: org.springframework.web.util.HtmlUtils.htmlEscape($X)
       - pattern: $POLICY.sanitize($X)
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A09 Security Logging Failures
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A09 Security Logging Failures
+  # ============================================================
+  
   - id: SPRING-OWASP-LOG-INJECTION-CONCAT
     message: >
       Unsafe logging pattern: string concatenation inside logger call.
@@ -309,9 +420,10 @@ rules:
       - pattern: $LOG.debug($S + $X, ...)
       - pattern: $LOG.trace($S + $X, ...)
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A04 Insecure Design (Mass Assignment)
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A04 Insecure Design (Mass Assignment)
+  # ============================================================
+  
   - id: SPRING-OWASP-MASS-ASSIGNMENT-REQUESTBODY-DOMAIN
     message: >
       Potential mass assignment risk: @RequestBody binds directly into a domain/entity-looking type.
@@ -336,9 +448,10 @@ rules:
           metavariable: $T
           regex: ".*(Entity|Model|Domain|User|Account|Admin|Profile).*"
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection (Missing Validation)
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A03 Injection (Missing Validation)
+  # ============================================================
+  
   - id: SPRING-OWASP-BEAN-VALIDATION-MISSING-VALID
     message: >
       Missing validation on request model: consider adding @Valid (or @Validated) and Bean Validation constraints
@@ -362,9 +475,10 @@ rules:
       - pattern-not: |
           public $RET $M(..., @Validated @RequestBody $T $X, ...){ ... }
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A10 SSRF
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A10 SSRF
+  # ============================================================
+  
   - id: SPRING-OWASP-SSRF-HTTPCLIENT-TAINT
     message: >
       Possible SSRF: request-derived URL reaches an outbound HTTP client call.
@@ -398,12 +512,13 @@ rules:
       - pattern: $WEBCLIENT.post().uri($URL).retrieve()
       - pattern: java.net.URI.create($URL)
     pattern-sanitizers:
-      - pattern: $ALLOWED.contains(...)
+      - pattern: $ALLOWED.contains($HOST)
       - pattern: $URI.getHost()
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A01 Broken Access Control (CSRF)
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A01 Broken Access Control (CSRF)
+  # ============================================================
+  
   - id: SPRING-OWASP-CSRF-DISABLED
     message: >
       CSRF protection appears disabled. Avoid disabling CSRF for browser-facing apps.
@@ -417,7 +532,7 @@ rules:
       confidence: high
       framework: [spring-security]
       references:
-        - "https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html"
+        - "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Request_Forgery_Prevention_Cheat_Sheet.html"
     paths:
       include: ["**/*.java"]
       exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
@@ -426,97 +541,45 @@ rules:
       - pattern: $HTTP.csrf($C -> $C.disable())
       - pattern: $HTTP.csrf(AbstractHttpConfigurer::disable)
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection (XXE)
-  # ------------------------------------------------------------
-  - id: SPRING-OWASP-XXE-UNHARDENED-DOCUMENTBUILDERFACTORY
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A01 Broken Access Control (Missing Auth)
+  # ============================================================
+  
+  - id: SPRING-OWASP-MISSING-AUTH-REST
     message: >
-      Potential XXE risk: DocumentBuilderFactory used without disabling DTD/external entities.
-      Follow OWASP XXE hardening features before parsing untrusted XML.
+      REST API endpoints lack authentication/authorization. Tutorials show open endpoints 
+      without any security. Implement Spring Security and protect endpoints 
+      (e.g., @PreAuthorize/@Secured or request matcher rules).
     severity: ERROR
     languages: [java]
     metadata:
       category: security
-      owasp_top10_2021: "A03:2021 Injection"
-      cwe: "CWE-611"
-      confidence: medium
+      owasp_top10_2021: "A01:2021 Broken Access Control"
+      cwe: "CWE-306"
+      confidence: high
+      framework: [spring-boot, spring-security]
       references:
-        - "https://cheatsheetseries.owasp.org/cheatsheets/XML_External_Entity_Prevention_Cheat_Sheet.html"
+        - "https://spring.io/guides/gs/securing-web/"
     paths:
       include: ["**/*.java"]
       exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     patterns:
       - pattern: |
-          $F = javax.xml.parsers.DocumentBuilderFactory.newInstance();
-          ...
-          $B = $F.newDocumentBuilder();
-          ...
-          $B.parse(...);
+          @RestController
+          class $C {
+            @GetMapping(...)
+            public $RET $METHOD(...) {
+              ...
+            }
+          }
       - pattern-not-inside: |
-          $F.setFeature("http://apache.org/xml/features/disallow-doctype-decl", true);
+          @PreAuthorize(...)
+          $METHOD
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection (LDAP)
-  # ------------------------------------------------------------
-  - id: SPRING-OWASP-LDAP-INJECTION-FILTERSTRING
-    message: >
-      Possible LDAP injection: request-derived input reaches LDAP filter string construction.
-      Use safe filter building/escaping per OWASP LDAP guidance.
-    severity: ERROR
-    languages: [java]
-    mode: taint
-    metadata:
-      category: security
-      owasp_top10_2021: "A03:2021 Injection"
-      cwe: "CWE-90"
-      confidence: medium
-      framework: [spring-ldap]
-      references:
-        - "https://cheatsheetseries.owasp.org/cheatsheets/LDAP_Injection_Prevention_Cheat_Sheet.html"
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
-    pattern-sources:
-      - pattern: $REQ.getParameter(...)
-      - pattern: |
-          @RequestParam(...) $T $X
-    pattern-sinks:
-      - pattern: $LDAP.search(..., $FILTER, ...)
-      - pattern: $LDAP.search($BASE, $FILTER, ...)
-      - pattern: $CTX.search(..., $FILTER)
-
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A03 Injection (NoSQL)
-  # ------------------------------------------------------------
-  - id: SPRING-OWASP-NOSQL-INJECTION-MONGO-BASICQUERY
-    message: >
-      Possible NoSQL injection: request-derived input reaches a Mongo string-based query.
-      Prefer Criteria/Query builder APIs and validate/allowlist inputs.
-    severity: ERROR
-    languages: [java]
-    mode: taint
-    metadata:
-      category: security
-      owasp_top10_2021: "A03:2021 Injection"
-      cwe: "CWE-943"
-      confidence: medium
-      framework: [spring-data-mongodb]
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
-    pattern-sources:
-      - pattern: $REQ.getParameter(...)
-      - pattern: |
-          @RequestParam(...) $T $X
-      - pattern: |
-          @RequestBody $T $OBJ
-    pattern-sinks:
-      - pattern: new org.springframework.data.mongodb.core.query.BasicQuery($Q)
-      - pattern: org.bson.Document.parse($Q)
-
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A01 Broken Access Control (Path Traversal)
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A01 Broken Access Control (Path Traversal)
+  # ============================================================
+  
   - id: SPRING-OWASP-PATH-TRAVERSAL-FILE
     message: >
       Possible Path Traversal: request-derived input used to access filesystem.
@@ -546,9 +609,10 @@ rules:
       - pattern: new java.io.FileInputStream(...)
       - pattern: java.nio.file.Paths.get(...)
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A07 Identification and Authentication Failures
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A07 Identification and Authentication Failures
+  # ============================================================
+  
   - id: SPRING-OWASP-HARDCODED-SECRET-HEURISTIC
     message: >
       Potential hardcoded secret. Storing secrets (passwords, keys, tokens) in source code
@@ -574,9 +638,10 @@ rules:
           metavariable: $LITERAL
           regex: "^(?=.*[A-Za-z])(?=.*[0-9]).{8,}$"
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A02 Cryptographic Failures
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A02 Cryptographic Failures
+  # ============================================================
+  
   - id: SPRING-OWASP-WEAK-HASHING-MD5-SHA1
     message: >
       Weak cryptographic hashing algorithm detected (MD5/SHA-1).
@@ -599,9 +664,10 @@ rules:
       - pattern: org.apache.commons.codec.digest.DigestUtils.md5Hex(...)
       - pattern: org.apache.commons.codec.digest.DigestUtils.sha1Hex(...)
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A02 Cryptographic Failures (Insecure Randomness)
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A02 Cryptographic Failures (Insecure Randomness)
+  # ============================================================
+  
   - id: SPRING-OWASP-INSECURE-RANDOM
     message: >
       Predictable pseudorandom number generator (java.util.Random) used.
@@ -620,9 +686,10 @@ rules:
       exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     pattern: new java.util.Random(...)
 
-  # ------------------------------------------------------------
-  # OWASP Top 10:2021 — A01 Broken Access Control (CORS)
-  # ------------------------------------------------------------
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A05 Security Misconfiguration (CORS)
+  # ============================================================
+  
   - id: SPRING-OWASP-CORS-PERMISSIVE
     message: >
       Permissive CORS policy detected (allowedOrigins("*")).
@@ -631,7 +698,7 @@ rules:
     languages: [java]
     metadata:
       category: security
-      owasp_top10_2021: "A01:2021 Broken Access Control"
+      owasp_top10_2021: "A05:2021 Security Misconfiguration"
       cwe: "CWE-942"
       confidence: high
       framework: [spring-mvc]
@@ -640,16 +707,502 @@ rules:
     paths:
       include: ["**/*.java"]
       exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
+    pattern-either:
+      - pattern: $REG.addMapping(...).allowedOrigins("*")
+      - pattern: |
+          @CrossOrigin(origins = "*")
+
+  # ============================================================
+  # SPRING BOOT - OWASP Top 10:2021 — A06 Vulnerable and Outdated Components
+  # ============================================================
+  
+  - id: SPRING-OWASP-ACTUATOR-EXPOSED
+    message: >
+      Actuator endpoints exposed without authentication. Tutorials show /actuator/health and /actuator 
+      endpoints publicly accessible. These expose sensitive application information. Secure with 
+      Spring Security or disable in production.
+    severity: ERROR
+    languages: [yaml, properties]
+    metadata:
+      category: security
+      owasp_top10_2021: "A01:2021 Broken Access Control"
+      cwe: "CWE-200"
+      confidence: high
+      framework: [spring-boot]
+      references:
+        - "https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html#actuator.endpoints.security"
+    paths:
+      include: ["**/application.properties", "**/application.yml"]
+    pattern-either:
+      - pattern: management.endpoints.web.exposure.include=*
+      - pattern: management.endpoints.web.exposure.include=health,info,metrics
+      - pattern: management.endpoints.enabled-by-default=true
+
+  # ============================================================
+  # SPRING BOOT - Custom: Tutorial-Specific Vulnerabilities
+  # ============================================================
+  
+  - id: SPRING-OWASP-TUTORIAL-HARDCODED-CREDS
+    message: >
+      Tutorial shows hardcoded credentials in source code. Found "in28Minutes"/"dummy" credentials 
+      in multiple tutorials. Never store passwords in code. Use environment variables or a secrets 
+      manager (Spring Vault/Cloud Config).
+    severity: ERROR
+    languages: [java]
+    metadata:
+      category: security
+      owasp_top10_2021: "A07:2021 Identification and Authentication Failures"
+      cwe: "CWE-798"
+      confidence: high
+      framework: [spring-boot]
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html"
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
+    pattern-either:
+      - pattern: user.equalsIgnoreCase("in28Minutes")
+      - pattern: password.equals("dummy")
+      - pattern: $VAR.equalsIgnoreCase("admin")
+      - pattern: $VAR.equals("password123")
+
+  # ============================================================
+  # SPRING BOOT - Custom: HTTP Session Security
+  # ============================================================
+  
+  - id: SPRING-OWASP-SESSION-INSECURE-CONFIG
+    message: >
+      Insecure HTTP session configuration: session cookies not marked as HttpOnly or Secure.
+      Enable httpOnly and secure flags for session cookies in Spring Security.
+    severity: WARNING
+    languages: [java]
+    metadata:
+      category: security
+      owasp_top10_2021: "A05:2021 Security Misconfiguration"
+      cwe: "CWE-614"
+      confidence: high
+      framework: [spring-security]
+      references:
+        - "https://docs.spring.io/spring-security/reference/servlet/exploits/httpsecurity.html"
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
     patterns:
-      - pattern-either:
-          - pattern: $REG.addMapping(...).allowedOrigins("*")
-          - pattern: |
-              @CrossOrigin(origins = "*")
+      - pattern: |
+          http.sessionManagement()
+              .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+      - pattern-not-inside: |
+          http.sessionManagement()
+              .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+              .and()
+              .headers().frameOptions().deny()
+              .and()
+              .headers().httpStrictTransportSecurity().includeSubdomains(true).maxAgeInSeconds(31536000)
 
   # ============================================================
-  # Positive / secure-by-default detection rules (INFO)
+  # SPRING BOOT - Custom: Thymeleaf XSS Protection
   # ============================================================
+  
+  - id: SPRING-OWASP-XSS-THYMELEAF-UNSANITIZED
+    message: >
+      XSS vulnerability in Thymeleaf template. User input passed directly to template without 
+      sanitization. Use th:text for automatic escaping or manually sanitize input.
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    metadata:
+      category: security
+      owasp_top10_2021: "A03:2021 Injection"
+      cwe: "CWE-79"
+      confidence: high
+      framework: [spring-mvc, thymeleaf]
+      references:
+        - "https://www.thymeleaf.org/doc/tutorials/3.0/usingthymeleaf.html#text-inlining"
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
+    pattern-sources:
+      - pattern: $REQ.getParameter(...)
+      - pattern: |
+          @RequestParam(...) $T $X
+    pattern-sinks:
+      - pattern: model.addAttribute($NAME, $X)
+      - pattern: model.put($NAME, $X)
 
+  # ============================================================
+  # SPRING BOOT - Custom: Spring Security Configuration Issues
+  # ============================================================
+  
+  - id: SPRING-OWASP-SECURITY-PERMIT-ALL
+    message: >
+      Overly permissive Spring Security configuration: .anyRequest().permitAll() allows all requests.
+      Implement proper authentication and authorization rules.
+    severity: ERROR
+    languages: [java]
+    metadata:
+      category: security
+      owasp_top10_2021: "A01:2021 Broken Access Control"
+      cwe: "CWE-285"
+      confidence: high
+      framework: [spring-security]
+      references:
+        - "https://docs.spring.io/spring-security/reference/servlet/authorization/authorize-http-requests.html"
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
+    patterns:
+      - pattern: http.authorizeHttpRequests().anyRequest().permitAll()
+      - pattern: $HTTP.authorizeHttpRequests($AUTH -> $AUTH.anyRequest().permitAll())
+
+  # ============================================================
+  # SPRING BOOT - Custom: JPA Entity Exposure
+  # ============================================================
+  
+  - id: SPRING-OWASP-JPA-ENTITY-EXPOSURE
+    message: >
+      JPA entities exposed directly via @RestController. This can lead to mass assignment and data leakage.
+      Use DTOs (Data Transfer Objects) to control what data is exposed.
+    severity: WARNING
+    languages: [java]
+    metadata:
+      category: security
+      owasp_top10_2021: "A04:2021 Insecure Design"
+      cwe: "CWE-915"
+      confidence: medium
+      framework: [spring-boot, jpa]
+      references:
+        - "https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html"
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
+    patterns:
+      - pattern: |
+          @Entity
+          class $ENTITY {
+            ...
+          }
+      - pattern: |
+          @RestController
+          class $CONTROLLER {
+            @PostMapping(...)
+            public $RET create(@RequestBody $ENTITY $VAR) {
+              ...
+            }
+          }
+
+  # ============================================================
+  # SPRING BOOT - Custom: Spring Boot Actuator Sensitive Endpoints
+  # ============================================================
+  
+  - id: SPRING-OWASP-ACTUATOR-SENSITIVE-EXPOSED
+    message: >
+      Sensitive actuator endpoints exposed: env, beans, configprops expose internal configuration.
+      Limit exposure to health, info, metrics only or secure with authentication.
+    severity: ERROR
+    languages: [yaml, properties]
+    metadata:
+      category: security
+      owasp_top10_2021: "A06:2021 Vulnerable and Outdated Components"
+      cwe: "CWE-200"
+      confidence: high
+      framework: [spring-boot]
+      references:
+        - "https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html#actuator.endpoints"
+    paths:
+      include: ["**/application.properties", "**/application.yml"]
+    pattern-either:
+      - pattern: management.endpoints.web.exposure.include=env,beans,configprops
+      - pattern: management.endpoints.web.exposure.include=*
+
+  # ============================================================
+  # SPRING BOOT - Custom: Spring Boot Configuration Properties
+  # ============================================================
+  
+  - id: SPRING-OWASP-CONFIG-SENSITIVE-PROPS
+    message: >
+      Sensitive configuration properties may be exposed: database passwords, API keys in application properties.
+      Use Spring Cloud Config Server with encryption or environment variables.
+    severity: WARNING
+    languages: [yaml, properties]
+    metadata:
+      category: security
+      owasp_top10_2021: "A05:2021 Security Misconfiguration"
+      cwe: "CWE-798"
+      confidence: medium
+      framework: [spring-boot]
+      references:
+        - "https://docs.spring.io/spring-cloud-config/docs/current/reference/html/"
+    paths:
+      include: ["**/application.properties", "**/application.yml"]
+    pattern-either:
+      - pattern: spring.datasource.password=...
+      - pattern: spring.datasource.username=...
+      - pattern: api.key=...
+      - pattern: secret.key=...
+
+  # ============================================================
+  # SPRING BOOT - Custom: Spring Boot DevTools in Production
+  # ============================================================
+  
+  - id: SPRING-OWAPT-DEVTOOLS-PRODUCTION
+    message: >
+      Spring Boot DevTools detected in production settings. DevTools enables hot reload and debugging features
+      that should not be available in production. Remove from production dependencies.
+    severity: ERROR
+    languages: [yaml, properties, xml]
+    metadata:
+      category: security
+      owasp_top10_2021: "A05:2021 Security Misconfiguration"
+      cwe: "CWE-215"
+      confidence: high
+      framework: [spring-boot]
+      references:
+        - "https://docs.spring.io/spring-boot/docs/current/reference/html/using.html#using.devtools"
+    paths:
+      include: ["**/pom.xml", "**/build.gradle", "**/application.properties", "**/application.yml"]
+    pattern-either:
+      - pattern: spring-boot-devtools
+      - pattern: spring.boot.devtools.restart.enabled=true
+
+  # ============================================================
+  # SPRING BOOT - Custom: Spring Boot H2 Console Exposed
+  # ============================================================
+  
+  - id: SPRING-OWASP-H2-CONSOLE-EXPOSED
+    message: >
+      H2 Database console exposed in production. The H2 console provides full database access
+      and should not be enabled in production. Disable with spring.h2.console.enabled=false
+    severity: ERROR
+    languages: [yaml, properties]
+    metadata:
+      category: security
+      owasp_top10_2021: "A05:2021 Security Misconfiguration"
+      cwe: "CWE-200"
+      confidence: high
+      framework: [spring-boot, h2]
+      references:
+        - "https://www.h2database.com/html/tutorial.html#console"
+    paths:
+      include: ["**/application.properties", "**/application.yml"]
+    patterns:
+      - pattern: spring.h2.console.enabled=true
+      - pattern: spring.h2.console.path=/h2-console
+
+  # ============================================================
+  # SPRING BOOT - Custom: Spring Boot Management Security
+  # ============================================================
+  
+  - id: SPRING-OWASP-MANAGEMENT-SECURITY-MISSING
+    message: >
+      Spring Boot management endpoints lack security configuration. Management endpoints expose
+      sensitive information and should be secured with Spring Security.
+    severity: ERROR
+    languages: [yaml, properties]
+    metadata:
+      category: security
+      owasp_top10_2021: "A01:2021 Broken Access Control"
+      cwe: "CWE-306"
+      confidence: high
+      framework: [spring-boot, spring-security]
+      references:
+        - "https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html#actuator.endpoints.security"
+    paths:
+      include: ["**/application.properties", "**/application.yml"]
+    pattern-either:
+      - pattern: management.security.enabled=false
+      - pattern: management.endpoints.web.exposure.include=*
+      - pattern-not: management.endpoints.web.exposure.include=health,info
+
+  # ============================================================
+  # SPRING BOOT - Custom: Spring Cloud Config Sensitive Data
+  # ============================================================
+  
+  - id: SPRING-OWASP-CLOUD-CONFIG-UNENCRYPTED
+    message: >
+      Spring Cloud Config Server serving unencrypted sensitive data. 
+      Enable encryption for sensitive properties or use Spring Cloud Config Server with Vault.
+    severity: WARNING
+    languages: [yaml, properties]
+    metadata:
+      category: security
+      owasp_top10_2021: "A05:2021 Security Misconfiguration"
+      cwe: "CWE-312"
+      confidence: medium
+      framework: [spring-cloud]
+      references:
+        - "https://docs.spring.io/spring-cloud-config/docs/current/reference/html/"
+    paths:
+      include: ["**/application.properties", "**/application.yml"]
+    patterns:
+      - pattern: encrypt.key=...
+      - pattern-not: "{cipher}..."
+
+  # ============================================================
+  # SPRING BOOT - Custom: Spring Boot Banner Information Disclosure
+  # ============================================================
+  
+  - id: SPRING-OWASP-BANNER-INFO-DISCLOSURE
+    message: >
+      Spring Boot banner shows version information. This can reveal framework version
+      to attackers. Disable with spring.main.banner-mode=off or use custom banner.
+    severity: INFO
+    languages: [yaml, properties]
+    metadata:
+      category: security
+      owasp_top10_2021: "A05:2021 Security Misconfiguration"
+      cwe: "CWE-200"
+      confidence: low
+      framework: [spring-boot]
+      references:
+        - "https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.spring-application.banner"
+    paths:
+      include: ["**/application.properties", "**/application.yml"]
+    patterns:
+      - pattern: spring.main.banner-mode=console
+      - pattern-not: spring.main.banner-mode=off
+
+  # ============================================================
+  # SPRING BOOT - Custom: Spring Boot Error Information Disclosure
+  # ============================================================
+  
+  - id: SPRING-OWASP-ERROR-INFO-DISCLOSURE
+    message: >
+      Detailed error messages may expose sensitive information. 
+      Configure custom error pages or disable detailed error messages in production.
+    severity: WARNING
+    languages: [java]
+    metadata:
+      category: security
+      owasp_top10_2021: "A05:2021 Security Misconfiguration"
+      cwe: "CWE-209"
+      confidence: medium
+      framework: [spring-boot]
+      references:
+        - "https://docs.spring.io/spring-boot/docs/current/reference/html/web.html#web.servlet.spring-mvc.error-handling"
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
+    patterns:
+      - pattern: |
+          @Controller
+          class $C {
+            @ExceptionHandler(Exception.class)
+            public ResponseEntity<$T> handleException(Exception e) {
+              return ResponseEntity.status(500).body(e.getMessage());
+            }
+          }
+
+  # ============================================================
+  # SPRING BOOT - Custom: Spring Boot Profile-Based Security
+  # ============================================================
+  
+  - id: SPRING-OWASP-PROFILE-SECURITY-MISSING
+    message: >
+      No security configuration for production profile. Ensure Spring Security is configured
+      for production environments using @Profile("prod") or conditional configuration.
+    severity: WARNING
+    languages: [java]
+    metadata:
+      category: security
+      owasp_top10_2021: "A05:2021 Security Misconfiguration"
+      cwe: "CWE-656"
+      confidence: medium
+      framework: [spring-boot]
+      references:
+        - "https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.profiles"
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
+    patterns:
+      - pattern: |
+          @Profile("dev")
+          @Configuration
+          class $CONFIG {
+            ...
+          }
+      - pattern-not-inside: |
+          @Profile("prod")
+          @Configuration
+          class $SECURITYCONFIG {
+            ...
+          }
+
+  # ============================================================
+  # SPRING BOOT - Custom: Spring Boot WebFlux Security
+  # ============================================================
+  
+  - id: SPRING-OWASP-WEBFLUX-SECURITY-MISSING
+    message: >
+      Spring WebFlux application without security configuration. 
+      Use @EnableWebFluxSecurity and configure security rules for reactive applications.
+    severity: ERROR
+    languages: [java]
+    metadata:
+      category: security
+      owasp_top10_2021: "A01:2021 Broken Access Control"
+      cwe: "CWE-306"
+      confidence: high
+      framework: [spring-webflux]
+      references:
+        - "https://docs.spring.io/spring-security/reference/reactive/configuration/webflux.html"
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
+    patterns:
+      - pattern: |
+          @SpringBootApplication
+          class $APP {
+            public static void main(String[] args) {
+              SpringApplication.run($APP.class, args);
+            }
+          }
+      - pattern-not-inside: |
+          @EnableWebFluxSecurity
+          class $SECURITYCONFIG {
+            ...
+          }
+
+  # ============================================================
+  # SPRING BOOT - Custom: Spring Boot Method Security
+  # ============================================================
+  
+  - id: SPRING-OWASP-METHOD-SECURITY-MISSING
+    message: >
+      Method-level security not enabled. Use @EnableGlobalMethodSecurity or @EnableMethodSecurity
+      to enable method-level security with @PreAuthorize and @Secured annotations.
+    severity: WARNING
+    languages: [java]
+    metadata:
+      category: security
+      owasp_top10_2021: "A01:2021 Broken Access Control"
+      cwe: "CWE-285"
+      confidence: medium
+      framework: [spring-security]
+      references:
+        - "https://docs.spring.io/spring-security/reference/servlet/authorization/method-security.html"
+    paths:
+      include: ["**/*.java"]
+      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
+    patterns:
+      - pattern: |
+          @Configuration
+          @EnableWebSecurity
+          class $SECURITYCONFIG {
+            @Bean
+            SecurityFilterChain filterChain(HttpSecurity http) {
+              ...
+            }
+          }
+      - pattern-not-inside: |
+          @EnableGlobalMethodSecurity(prePostEnabled = true)
+          class $SECURITYCONFIG {
+            ...
+          }
+
+  # ============================================================
+  # SPRING BOOT - Positive Rules (Good Practices)
+  # ============================================================
+  
   - id: POS-SPRING-MASSASSIGNMENT-INITBINDER-ALLOWLIST
     message: >
       Good practice: controller uses @InitBinder with setAllowedFields allowlist to mitigate mass assignment.
@@ -690,243 +1243,32 @@ rules:
     pattern: |
       public $RET $M(..., @Valid @RequestBody $T $X, ...){ ... }
 
-  - id: SPRING-OWASP-CSRF-DISABLED-TUTORIAL
+  - id: POS-SPRING-SECURE-COOKIE-CONFIGURATION
     message: >
-      CSRF protection disabled in tutorial code. This is a critical vulnerability in browser-facing apps.
-      The tutorials disable CSRF without explanation. For APIs, use proper authentication tokens instead.
-    severity: ERROR
+      Good practice: Secure cookie configuration with httpOnly and secure flags enabled.
+    severity: INFO
     languages: [java]
     metadata:
-      category: security
-      owasp_top10_2021: "A01:2021 Broken Access Control"
-      cwe: "CWE-352"
+      category: best-practice
       confidence: high
+      kind: positive-rule
       framework: [spring-security]
-      references:
-        - "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Request_Forgery_Prevention_Cheat_Sheet.html"
-        - "https://www.baeldung.com/spring-security-csrf"
     paths:
       include: ["**/*.java"]
       exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
-    pattern-either:
-      - pattern: http.csrf().disable()
-      - pattern: $HTTP.csrf($C -> $C.disable())
-      - pattern: $HTTP.csrf(AbstractHttpConfigurer::disable)
-
-  # ------------------------------------------------------------
-  # FIXED: properties is not supported -> use generic + split rules
-  # ------------------------------------------------------------
-  - id: SPRING-OWASP-ACTUATOR-EXPOSED-YAML
-    message: >
-      Actuator endpoints exposed without authentication. Public actuator endpoints can expose
-      sensitive application information. Restrict exposure and require authentication in production.
-    severity: ERROR
-    languages: [yaml]
-    metadata:
-      category: security
-      owasp_top10_2021: "A01:2021 Broken Access Control"
-      cwe: "CWE-200"
-      confidence: high
-      framework: [spring-boot]
-      references:
-        - "https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html#actuator.endpoints.security"
-    paths:
-      include: ["**/application.yml", "**/application.yaml"]
-      exclude: ["**/test/**", "**/.semgrep/**"]
-    pattern-either:
-      - pattern: |
-          management:
-            endpoints:
-              web:
-                exposure:
-                  include: "*"
-      - pattern: |
-          management:
-            endpoints:
-              enabled-by-default: true
-      - pattern: |
-          management:
-            endpoints:
-              web:
-                exposure:
-                  include:
-                    - "*"
-
-  - id: SPRING-OWASP-ACTUATOR-EXPOSED-PROPERTIES
-    message: >
-      Actuator endpoints exposed without authentication. Public actuator endpoints can expose
-      sensitive application information. Restrict exposure and require authentication in production.
-    severity: ERROR
-    languages: [generic]
-    metadata:
-      category: security
-      owasp_top10_2021: "A01:2021 Broken Access Control"
-      cwe: "CWE-200"
-      confidence: high
-      framework: [spring-boot]
-      references:
-        - "https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html#actuator.endpoints.security"
-    paths:
-      include: ["**/application.properties"]
-      exclude: ["**/test/**", "**/.semgrep/**"]
-    pattern-either:
-      - pattern: management.endpoints.web.exposure.include=*
-      - pattern: management.endpoints.web.exposure.include=health,info,metrics
-      - pattern: management.endpoints.enabled-by-default=true
-
-  - id: SPRING-OWASP-TUTORIAL-HARDCODED-CREDS
-    message: >
-      Tutorial shows hardcoded credentials in source code. Found "in28Minutes"/"dummy" credentials
-      in multiple tutorials. Never store passwords in code. Use environment variables or secure
-      configuration management.
-    severity: ERROR
-    languages: [java]
-    metadata:
-      category: security
-      owasp_top10_2021: "A07:2021 Identification and Authentication Failures"
-      cwe: "CWE-798"
-      confidence: high
-      framework: [spring-boot]
-      references:
-        - "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html"
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
-    pattern-either:
-      - pattern: user.equalsIgnoreCase("in28Minutes")
-      - pattern: password.equals("dummy")
-      - pattern: $VAR.equalsIgnoreCase("admin")
-      - pattern: $VAR.equals("password123")
-      
-  - id: SPRING-OWASP-MISSING-AUTH-REST
-    message: >
-      REST API endpoints lack authentication/authorization. Tutorials show open endpoints without
-      any security. Implement Spring Security and protect endpoints (e.g., @PreAuthorize/@Secured or
-      request matcher rules).
-    severity: ERROR
-    languages: [java]
-    metadata:
-      category: security
-      owasp_top10_2021: "A01:2021 Broken Access Control"
-      cwe: "CWE-306"
-      confidence: high
-      framework: [spring-boot, spring-security]
-      references:
-        - "https://spring.io/guides/gs/securing-web/"
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
-
     patterns:
-      # 1) We are inside a RestController class
-      - pattern-inside: |
-          @RestController
-          class $C {
-            ...
-          }
-
-      # 2) We match a request handler method (any mapping)
-      - pattern-either:
-          - pattern: |
-              @$MAP(...)
-              public $RET $METH(...){
-                ...
-              }
-          - pattern: |
-              @$MAP(...)
-              public $RET $METH(...) {
-                ...
-              }
-
-      # 3) Exclude methods that already have method-level authz annotations
-      - pattern-not-inside: |
-          @PreAuthorize(...)
-          public $RET $METH(...){
-            ...
-          }
-      - pattern-not-inside: |
-          @PreAuthorize(...)
-          public $RET $METH(...) {
-            ...
-          }
-      - pattern-not-inside: |
-          @Secured(...)
-          public $RET $METH(...){
-            ...
-          }
-      - pattern-not-inside: |
-          @Secured(...)
-          public $RET $METH(...) {
-            ...
-          }
-
-
-  - id: SPRING-OWASP-XSS-THYMELEAF-UNSANITIZED
-    message: >
-      XSS vulnerability in Thymeleaf template. User input passed directly to template without
-      sanitization. Use th:text for automatic escaping or manually sanitize input.
-    severity: ERROR
-    languages: [java]
-    mode: taint
-    metadata:
-      category: security
-      owasp_top10_2021: "A03:2021 Injection"
-      cwe: "CWE-79"
-      confidence: high
-      framework: [spring-mvc, thymeleaf]
-      references:
-        - "https://www.thymeleaf.org/doc/tutorials/3.0/usingthymeleaf.html#text-inlining"
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/.semgrep/**"]
-    pattern-sources:
-      - pattern: $REQ.getParameter(...)
       - pattern: |
-          @RequestParam(...) $T $X
-    pattern-sinks:
-      - pattern: model.addAttribute($NAME, $X)
-      - pattern: model.put($NAME, $X)
-
-  # ------------------------------------------------------------
-  # FIXED: properties is not supported -> use generic + split rules
-  # ------------------------------------------------------------
-  - id: SPRING-OWASP-HTTP-ONLY-CONFIG-YAML
-    message: >
-      TLS/SSL appears disabled (server.ssl.enabled: false). Tutorials may use HTTP for simplicity,
-      but production applications should use HTTPS (TLS) for secure communication.
-    severity: WARNING
-    languages: [yaml]
-    metadata:
-      category: security
-      owasp_top10_2021: "A02:2021 Cryptographic Failures"
-      cwe: "CWE-319"
-      confidence: high
-      framework: [spring-boot]
-      references:
-        - "https://docs.spring.io/spring-boot/docs/current/reference/html/howto.html#howto.webserver.configure-ssl"
-    paths:
-      include: ["**/application.yml", "**/application.yaml"]
-      exclude: ["**/test/**", "**/.semgrep/**"]
-    pattern: |
-      server:
-        ssl:
-          enabled: false
-
-  - id: SPRING-OWASP-HTTP-ONLY-CONFIG-PROPERTIES
-    message: >
-      TLS/SSL appears disabled (server.ssl.enabled=false). Tutorials may use HTTP for simplicity,
-      but production applications should use HTTPS (TLS) for secure communication.
-    severity: WARNING
-    languages: [generic]
-    metadata:
-      category: security
-      owasp_top10_2021: "A02:2021 Cryptographic Failures"
-      cwe: "CWE-319"
-      confidence: high
-      framework: [spring-boot]
-      references:
-        - "https://docs.spring.io/spring-boot/docs/current/reference/html/howto.html#howto.webserver.configure-ssl"
-    paths:
-      include: ["**/application.properties"]
-      exclude: ["**/test/**", "**/.semgrep/**"]
-    pattern: server.ssl.enabled=false
+          http.sessionManagement()
+              .sessionCreationPolicy(SessionCreationPolicy.IF_REQUIRED)
+              .and()
+              .headers().frameOptions().deny()
+              .and()
+              .headers().httpStrictTransportSecurity().includeSubdomains(true).maxAgeInSeconds(31536000)
+              .and()
+              .and()
+              .sessionManagement()
+              .sessionFixation().migrateSession()
+              .and()
+              .logout()
+              .deleteCookies("JSESSIONID")
+              .invalidateHttpSession(true)
