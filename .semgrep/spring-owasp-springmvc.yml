@@ -1,13 +1,8 @@
-# spring-boot-security-complete.yml
-# Complete Spring Boot Security Rules - Validated & Production-Ready
-# Version: 2.0 - Rewritten with proper syntax validation
-# Last Updated: 2025-01-01
-
 rules:
   # ============================================================
   # CORE SECURITY RULES - SQL INJECTION
   # ============================================================
-  
+
   - id: spring-sql-injection-jdbc
     message: >
       SQL Injection vulnerability: User input reaches JDBC Statement.execute*() without parameterization.
@@ -31,6 +26,7 @@ rules:
     pattern-sources:
       - pattern: request.getParameter(...)
       - pattern: request.getHeader(...)
+      # Syntax fix: keep it a real Java call (no args). Your original is fine; leaving as-is and consistent.
       - pattern: request.getQueryString()
       - pattern: |
           @RequestParam $TYPE $PARAM
@@ -79,7 +75,7 @@ rules:
   # ============================================================
   # CORE SECURITY RULES - AUTHENTICATION & AUTHORIZATION
   # ============================================================
-  
+
   - id: spring-missing-authentication
     message: >
       Missing authentication: REST endpoints lack security configuration.
@@ -108,12 +104,15 @@ rules:
               ...
             }
           }
+
+      # Syntax fix only: make these valid Java method patterns (intent unchanged)
       - pattern-not-inside: |
           @PreAuthorize(...)
-          $METHOD
+          public $RET $METHOD2(...) { ... }
+
       - pattern-not-inside: |
           @Secured(...)
-          $METHOD
+          public $RET $METHOD3(...) { ... }
 
   - id: spring-csrf-disabled
     message: >
@@ -171,7 +170,7 @@ rules:
   # ============================================================
   # INPUT VALIDATION & XSS PROTECTION
   # ============================================================
-  
+
   - id: spring-xss-reflected
     message: >
       Reflected XSS vulnerability: User input returned in HTTP response without encoding.
@@ -232,7 +231,7 @@ rules:
   # ============================================================
   # CONFIGURATION SECURITY
   # ============================================================
-  
+
   - id: spring-actuator-exposed
     message: >
       Actuator endpoints exposed without authentication. Limit to health,info,metrics or secure with Spring Security.
@@ -306,7 +305,7 @@ rules:
   # ============================================================
   # CRYPTOGRAPHIC SECURITY
   # ============================================================
-  
+
   - id: spring-weak-hashing
     message: >
       Weak cryptographic hashing algorithm (MD5/SHA-1) detected. Use SHA-256 or bcrypt for passwords.
@@ -354,7 +353,7 @@ rules:
   # ============================================================
   # TUTORIAL-SPECIFIC VULNERABILITIES
   # ============================================================
-  
+
   - id: spring-tutorial-credentials
     message: >
       Tutorial hardcoded credentials detected. Never use 'in28Minutes'/'dummy' in production code.
@@ -404,7 +403,7 @@ rules:
   # ============================================================
   # SPRING BOOT SPECIFIC SECURITY
   # ============================================================
-  
+
   - id: spring-devtools-production
     message: >
       Spring Boot DevTools detected. Remove from production dependencies - enables hot reload and debugging.
@@ -478,7 +477,7 @@ rules:
   # ============================================================
   # MASS ASSIGNMENT & DATA BINDING
   # ============================================================
-  
+
   - id: spring-mass-assignment-direct-entity
     message: >
       Direct entity binding detected: @RequestBody on JPA entity without validation.
@@ -501,7 +500,7 @@ rules:
       - pattern: |
           @Entity
           class $ENTITY { ... }
-          
+
           @RestController
           class $CONTROLLER {
             @PostMapping(...)
@@ -513,7 +512,7 @@ rules:
   # ============================================================
   # POSITIVE SECURITY PATTERNS (GOOD PRACTICES)
   # ============================================================
-  
+
   - id: spring-security-enabled
     message: >
       Good practice: Spring Security properly configured with authentication and authorization.
