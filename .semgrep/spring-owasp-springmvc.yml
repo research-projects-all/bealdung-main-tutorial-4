@@ -833,10 +833,10 @@ rules:
 
   - id: SPRING-OWASP-HTTP-ONLY-CONFIG
     message: >
-      Application configured for HTTP only. Tutorials use HTTP for simplicity but production
-      applications must use HTTPS. Configure SSL/TLS for secure communication.
+      TLS/SSL appears disabled (server.ssl.enabled=false). Tutorials may use HTTP for simplicity,
+      but production applications should use HTTPS (TLS) for secure communication.
     severity: WARNING
-    languages: [yaml, properties]
+    languages: [properties, yaml]
     metadata:
       category: security
       owasp_top10_2021: "A02:2021 Cryptographic Failures"
@@ -846,5 +846,15 @@ rules:
       references:
         - "https://docs.spring.io/spring-boot/docs/current/reference/html/howto.html#howto.webserver.configure-ssl"
     paths:
-      include: ["**/application.properties", "**/application.yml"]
-    pattern-not: server.ssl.enabled=true
+      include: ["**/application.properties", "**/application.yml", "**/application.yaml"]
+      exclude: ["**/test/**", "**/.semgrep/**"]
+    pattern-either:
+      # application.properties
+      - pattern: server.ssl.enabled=false
+
+      # application.yml / application.yaml
+      - pattern: |
+          server:
+            ssl:
+              enabled: false
+
