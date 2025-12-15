@@ -1,13 +1,7 @@
 rules:
   # ============================================================
-  # CORE SOURCES (shared patterns)
-  # Notes:
-  # - In taint mode, controller bindings are tricky. These sources are
-  #   best-effort for tutorials and common code shapes.
-  # ============================================================
-
-  # ============================================================
-  # A03:2021 — Injection (SQL Injection - JDBC)
+  # SECTION 1: INJECTION (A03:2021)
+  # Includes: SQLi, NoSQLi, Command Injection, XSS
   # ============================================================
 
   - id: spring-sql-injection-jdbc
@@ -20,1041 +14,369 @@ rules:
     mode: taint
     metadata:
       category: security
-      owasp: "A03:2021"
+      owasp: "A03:2021-Injection"
       cwe: "CWE-89"
       confidence: high
-      framework: [spring, spring-boot, spring-jdbc]
-      references:
-        - "https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html"
-        - "https://docs.spring.io/spring-framework/docs/current/reference/html/data-access.html"
     paths:
       include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
+      exclude: ["**/test/**", "**/*Test.java"]
     pattern-sources:
       - pattern: request.getParameter(...)
       - pattern: request.getHeader(...)
       - pattern: request.getQueryString()
-      # Best-effort Spring MVC bindings (tutorial-shaped)
       - pattern: |
-          $RET $M(..., @RequestParam $T $X, ...) { ... }
+          @RequestParam $TYPE $PARAM
       - pattern: |
-          $RET $M(..., @PathVariable $T $X, ...) { ... }
-      - pattern: |
-          $RET $M(..., @RequestBody $T $X, ...) { ... }
+          @PathVariable $TYPE $PARAM
     pattern-sinks:
       - pattern: $STMT.executeQuery($SQL)
       - pattern: $STMT.executeUpdate($SQL)
       - pattern: $STMT.execute($SQL)
-      # Common Spring JDBC sinks (frequent in tutorials)
-      - pattern: $JDBC.query($SQL, ...)
-      - pattern: $JDBC.update($SQL, ...)
-      - pattern: $NPJDBC.query($SQL, ...)
-      - pattern: $NPJDBC.update($SQL, ...)
     pattern-sanitizers:
-      # NOTE: regex matching is not a safe SQL sanitizer in general; kept as weak sanitizer.
       - pattern: java.util.regex.Pattern.matches(...)
-
-  # ============================================================
-  # A03:2021 — Injection (SQL Injection - JPA / EntityManager)
-  # ============================================================
 
   - id: spring-sql-injection-jpa
     message: >
       SQL Injection in JPA: Dynamic query construction with user input detected.
       Use parameterized JPQL queries with :namedParam or Criteria API.
-      Risk: Critical - allows database manipulation
     severity: ERROR
     languages: [java]
     mode: taint
     metadata:
       category: security
-      owasp: "A03:2021"
+      owasp: "A03:2021-Injection"
       cwe: "CWE-89"
-      confidence: high
-      framework: [spring, spring-boot, spring-data-jpa]
-      references:
-        - "https://docs.spring.io/spring-data/jpa/docs/current/reference/html/"
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
     pattern-sources:
       - pattern: request.getParameter(...)
-      - pattern: request.getHeader(...)
       - pattern: |
-          $RET $M(..., @RequestParam $T $X, ...) { ... }
+          @RequestParam $TYPE $PARAM
       - pattern: |
-          $RET $M(..., @PathVariable $T $X, ...) { ... }
-      - pattern: |
-          $RET $M(..., @RequestBody $T $X, ...) { ... }
+          @PathVariable $TYPE $PARAM
     pattern-sinks:
       - pattern: $EM.createQuery($QUERY)
       - pattern: $EM.createNativeQuery($QUERY)
-      # createNamedQuery is usually safer; omitted to reduce noise.
 
-  # ============================================================
-  # A01/A07:2021 — Access Control / Auth Failures (tutorial heuristic)
-  # ============================================================
-
-  - id: spring-missing-authentication
+  - id: java-command-injection
     message: >
-      Possible missing authentication/authorization: REST endpoints appear without method-level access control.
-      Consider adding Spring Security and explicit authorization rules (method annotations or SecurityFilterChain matchers).
-      Risk: Critical - may allow unauthorized access
-    severity: ERROR
-    languages: [java]
-    metadata:
-      category: security
-      owasp: "A01:2021"
-      cwe: "CWE-306"
-      confidence: medium
-      framework: [spring-boot, spring-security]
-      references:
-        - "https://spring.io/guides/gs/securing-web/"
-        - "https://docs.spring.io/spring-security/reference/"
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    patterns:
-      - pattern-either:
-          - pattern: |
-              @RestController
-              class $C {
-                @RequestMapping(...)
-                public $RET $M(...) { ... }
-              }
-          - pattern: |
-              @RestController
-              class $C {
-                @GetMapping(...)
-                public $RET $M(...) { ... }
-              }
-          - pattern: |
-              @RestController
-              class $C {
-                @PostMapping(...)
-                public $RET $M(...) { ... }
-              }
-          - pattern: |
-              @RestController
-              class $C {
-                @PutMapping(...)
-                public $RET $M(...) { ... }
-              }
-          - pattern: |
-              @RestController
-              class $C {
-                @DeleteMapping(...)
-                public $RET $M(...) { ... }
-              }
-      - pattern-not-inside: |
-          @PreAuthorize(...)
-          public $RET $M2(...) { ... }
-      - pattern-not-inside: |
-          @Secured(...)
-          public $RET $M3(...) { ... }
-      - pattern-not-inside: |
-          @RolesAllowed(...)
-          public $RET $M4(...) { ... }
-
-  # ============================================================
-  # A01:2021 — CSRF
-  # ============================================================
-
-  - id: spring-csrf-disabled
-    message: >
-      CSRF protection disabled. This is dangerous for browser-facing applications.
-      Remove csrf().disable() or document why it's safe for your API-only service.
-      Risk: High - allows cross-site request forgery
-    severity: ERROR
-    languages: [java]
-    metadata:
-      category: security
-      owasp: "A01:2021"
-      cwe: "CWE-352"
-      confidence: high
-      framework: [spring-security]
-      references:
-        - "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Request_Forgery_Prevention_Cheat_Sheet.html"
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    pattern-either:
-      - pattern: http.csrf().disable()
-      - pattern: $HTTP.csrf($C -> $C.disable())
-      - pattern: $HTTP.csrf(AbstractHttpConfigurer::disable)
-
-  # ============================================================
-  # A01:2021 — Path Traversal
-  # ============================================================
-
-  - id: spring-path-traversal
-    message: >
-      Path traversal vulnerability: User input used for file system access without validation.
-      Validate against allowlist or use Path.normalize().startsWith(base).
-      Risk: High - allows unauthorized file access
+      Command Injection: User input flows into system command execution.
+      Avoid Runtime.exec() or ProcessBuilder with user input. Use specific libraries or strict validation.
     severity: ERROR
     languages: [java]
     mode: taint
     metadata:
       category: security
-      owasp: "A01:2021"
-      cwe: "CWE-22"
-      confidence: high
-      framework: [spring, spring-boot]
-      references:
-        - "https://owasp.org/www-community/attacks/Path_Traversal"
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
+      owasp: "A03:2021-Injection"
+      cwe: "CWE-78"
     pattern-sources:
       - pattern: request.getParameter(...)
       - pattern: |
-          $RET $M(..., @RequestParam $T $X, ...) { ... }
-      - pattern: |
-          $RET $M(..., @PathVariable $T $X, ...) { ... }
+          @RequestParam $TYPE $PARAM
     pattern-sinks:
-      - pattern: new File($PATH)
-      - pattern: new FileInputStream($PATH)
-      - pattern: Paths.get($PATH)
-      - pattern: Files.newInputStream(Paths.get($PATH))
-      - pattern: Files.readAllBytes(Paths.get($PATH))
-
-  # ============================================================
-  # A03:2021 — Injection (Reflected XSS) — tutorial-focused heuristic
-  # ============================================================
+      - pattern: Runtime.getRuntime().exec($CMD)
+      - pattern: new ProcessBuilder($CMD)
 
   - id: spring-xss-reflected
     message: >
-      Possible reflected XSS: User-controlled input returned in an HTTP response without output encoding.
-      Use OWASP Java Encoder or Spring HtmlUtils.htmlEscape() for output encoding.
-      Risk: High - allows script injection
+      Reflected XSS: User input returned in HTTP response without encoding.
+      Use OWASP Java Encoder or Spring HtmlUtils.htmlEscape().
     severity: ERROR
     languages: [java]
     mode: taint
     metadata:
       category: security
-      owasp: "A03:2021"
+      owasp: "A03:2021-Injection"
       cwe: "CWE-79"
-      confidence: medium
-      framework: [spring-mvc, spring-boot]
-      references:
-        - "https://cheatsheetseries.owasp.org/cheatsheets/Cross_Site_Scripting_Prevention_Cheat_Sheet.html"
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
     pattern-sources:
       - pattern: request.getParameter(...)
       - pattern: |
-          $RET $M(..., @RequestParam $T $X, ...) { ... }
-      - pattern: |
-          $RET $M(..., @PathVariable $T $X, ...) { ... }
+          @RequestParam $TYPE $PARAM
     pattern-sinks:
       - pattern: return $INPUT;
       - pattern: ResponseEntity.ok($INPUT)
-      - pattern: ResponseEntity.status(...).body($INPUT)
-      - pattern: $RESP.getWriter().write($INPUT)
     pattern-sanitizers:
       - pattern: HtmlUtils.htmlEscape($INPUT)
       - pattern: Encode.forHtml($INPUT)
 
   # ============================================================
-  # A03:2021 — Input Validation
+  # SECTION 2: BROKEN ACCESS CONTROL (A01:2021)
+  # Includes: AuthZ, CSRF, Path Traversal
   # ============================================================
 
-  - id: spring-missing-validation
+  - id: spring-missing-authentication
     message: >
-      Missing input validation: @RequestBody without @Valid annotation.
-      Add @Valid with Bean Validation constraints for input sanitization.
-      Risk: Medium - allows invalid data processing
+      Missing authentication: REST endpoints lack security annotations (PreAuthorize/Secured).
+      Ensure strict access control on all Controllers.
+    severity: ERROR
+    languages: [java]
+    metadata:
+      category: security
+      owasp: "A01:2021-Broken Access Control"
+      cwe: "CWE-306"
+    patterns:
+      # 1. Match Inside a RestController
+      - pattern-inside: |
+          @RestController
+          class $CONTROLLER { ... }
+      # 2. Match the method definition
+      - pattern: |
+          @RequestMapping(...)
+          public $RET $METHOD(...) { ... }
+      # 3. Filter OUT methods that HAVE annotations (Negation Logic Fix)
+      - pattern-not: |
+          @PreAuthorize(...)
+          public $RET $METHOD(...) { ... }
+      - pattern-not: |
+          @Secured(...)
+          public $RET $METHOD(...) { ... }
+
+  - id: spring-csrf-disabled
+    message: >
+      CSRF protection disabled. Dangerous for browser-based apps.
+      Only safe if API is stateless (JWT) and not browser-consumable.
     severity: WARNING
     languages: [java]
     metadata:
       category: security
-      owasp: "A03:2021"
-      cwe: "CWE-20"
-      confidence: medium
-      framework: [spring, spring-boot]
-      references:
-        - "https://docs.spring.io/spring-framework/docs/current/reference/html/core.html#validation"
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
+      owasp: "A01:2021-Broken Access Control"
+      cwe: "CWE-352"
+    pattern-either:
+      - pattern: http.csrf().disable()
+      - pattern: $HTTP.csrf(AbstractHttpConfigurer::disable)
+
+  - id: spring-path-traversal
+    message: >
+      Path Traversal: User input used in file paths without validation.
+      Use 'FilenameUtils.getName()' to strip paths or validate against an allowlist.
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    metadata:
+      category: security
+      owasp: "A01:2021-Broken Access Control"
+      cwe: "CWE-22"
+    pattern-sources:
+      - pattern: request.getParameter(...)
+      - pattern: |
+          @RequestParam $TYPE $PARAM
+    pattern-sinks:
+      - pattern: new File($PATH)
+      - pattern: new FileInputStream($PATH)
+      - pattern: Paths.get($PATH)
+    pattern-sanitizers:
+      - pattern: org.apache.commons.io.FilenameUtils.getName(...)
+
+  # ============================================================
+  # SECTION 3: SERVER-SIDE REQUEST FORGERY (A10:2021) - NEW!
+  # ============================================================
+
+  - id: java-ssrf-url-connection
+    message: >
+      Potential SSRF: User input used to create URL connections.
+      Attacker can access internal network resources. Validate URL against allowlist.
+    severity: ERROR
+    languages: [java]
+    mode: taint
+    metadata:
+      category: security
+      owasp: "A10:2021-SSRF"
+      cwe: "CWE-918"
+    pattern-sources:
+      - pattern: request.getParameter(...)
+      - pattern: |
+          @RequestParam $TYPE $PARAM
+    pattern-sinks:
+      - pattern: new URL($URL).openConnection()
+      - pattern: new URL($URL).openStream()
+      - pattern: HttpClient.newHttpClient().send(...)
+      - pattern: new RestTemplate().getForObject(...)
+
+  # ============================================================
+  # SECTION 4: INSECURE DESERIALIZATION (A08:2021) - NEW!
+  # ============================================================
+
+  - id: java-insecure-deserialization
+    message: >
+      Insecure Deserialization: ObjectInputStream used on untrusted data.
+      This can lead to Remote Code Execution (RCE). Use JSON/XML with strict type validation instead.
+    severity: ERROR
+    languages: [java]
+    metadata:
+      category: security
+      owasp: "A08:2021-Software and Data Integrity Failures"
+      cwe: "CWE-502"
+    pattern-either:
+      - pattern: new ObjectInputStream($IN)
+      - pattern: |
+          class $CLASS extends ObjectInputStream { ... }
+
+  # ============================================================
+  # SECTION 5: SECURITY LOGGING FAILURES (A09:2021) - NEW!
+  # ============================================================
+
+  - id: java-system-out-logging
+    message: >
+      Use of System.out.println() for logging.
+      Use a proper logger (SLF4J/Logback) to ensure logs are structured, timestamped, and have correct severity levels.
+    severity: WARNING
+    languages: [java]
+    metadata:
+      category: best-practice
+      owasp: "A09:2021-Security Logging and Monitoring Failures"
+    pattern-either:
+      - pattern: System.out.println(...)
+      - pattern: System.err.println(...)
+      - pattern: e.printStackTrace()
+
+  - id: spring-log-injection
+    message: >
+      Log Injection (Forging): User input logged without sanitization.
+      Attackers can forge log entries to hide attacks. Use structured logging (MDC) or replace newlines.
+    severity: WARNING
+    languages: [java]
+    mode: taint
+    metadata:
+      category: security
+      owasp: "A09:2021-Security Logging and Monitoring Failures"
+      cwe: "CWE-117"
+    pattern-sources:
+      - pattern: request.getParameter(...)
+    pattern-sinks:
+      - pattern: $LOGGER.info(..., $INPUT, ...)
+      - pattern: $LOGGER.warn(..., $INPUT, ...)
+      - pattern: $LOGGER.error(..., $INPUT, ...)
+
+  # ============================================================
+  # SECTION 6: INSECURE DESIGN & MASS ASSIGNMENT (A04:2021)
+  # ============================================================
+
+  - id: spring-mass-assignment-heuristic
+    message: >
+      Potential Mass Assignment: @RequestBody parameter does not appear to be a DTO (doesn't end in 'Dto', 'Request', or 'Model').
+      Binding directly to @Entity classes allows attackers to overwrite internal fields (e.g., isAdmin).
+      Ensure you use a dedicated DTO class.
+    severity: WARNING
+    languages: [java]
+    metadata:
+      category: security
+      owasp: "A04:2021-Insecure Design"
+      cwe: "CWE-915"
+    patterns:
+      - pattern: public $RET $METHOD(..., @RequestBody $TYPE $PARAM, ...)
+      # Regex: Look for types that DO NOT end in Dto, Request, or Model
+      - metavariable-regex:
+          metavariable: $TYPE
+          regex: "^(?!.*(Dto|DTO|Request|Model)$).*$"
+
+  - id: spring-missing-validation
+    message: >
+      Missing input validation: @RequestBody without @Valid annotation.
+      Add @Valid to ensure Bean Validation constraints are applied.
+    severity: WARNING
+    languages: [java]
+    metadata:
+      category: security
+      owasp: "A04:2021-Insecure Design"
     patterns:
       - pattern: |
           public $RET $METHOD(..., @RequestBody $TYPE $PARAM, ...){ ... }
       - pattern-not: |
           public $RET $METHOD(..., @Valid @RequestBody $TYPE $PARAM, ...){ ... }
-      - pattern-not-inside: |
-          @Validated
-          class $C { ... }
 
   # ============================================================
-  # A05:2021 — Security Misconfiguration (Actuator / Debug / H2 / Secrets)
-  # ============================================================
-
-  - id: spring-actuator-exposed
-    message: >
-      Actuator endpoints exposed without authentication. Limit to health,info,metrics or secure with Spring Security.
-      Risk: High - exposes sensitive application information
-    severity: ERROR
-    languages: [generic]
-    metadata:
-      category: security
-      owasp: "A05:2021"
-      confidence: high
-      framework: [spring-boot]
-      references:
-        - "https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html#actuator.endpoints.security"
-    paths:
-      include: ["**/application.properties", "**/application.yml", "**/application.yaml"]
-    patterns:
-      - pattern-either:
-          - pattern-regex: management\.endpoints\.web\.exposure\.include=\*
-          - pattern-regex: management\.endpoints\.web\.exposure\.include:\s*"\*"
-          - pattern-regex: management\.endpoints\.web\.exposure\.include:\s*\*
-
-  - id: spring-debug-enabled
-    message: >
-      DEBUG mode enabled in production settings. This exposes sensitive information and stack traces.
-      Risk: Medium - information disclosure
-    severity: ERROR
-    languages: [generic]
-    metadata:
-      category: security
-      owasp: "A05:2021"
-      confidence: medium
-      framework: [spring-boot]
-      references:
-        - "https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.logging"
-    paths:
-      include: ["**/application.properties", "**/application.yml", "**/application.yaml"]
-    patterns:
-      - pattern-either:
-          - pattern-regex: debug=true
-          - pattern-regex: debug:\s*true
-          - pattern-regex: logging\.level\.root=DEBUG
-          - pattern-regex: logging\.level\.root:\s*DEBUG
-
-  - id: spring-h2-console-exposed
-    message: >
-      H2 Database console exposed in production. Disable with spring.h2.console.enabled=false
-      Risk: Critical - provides full database access
-    severity: ERROR
-    languages: [generic]
-    metadata:
-      category: security
-      owasp: "A05:2021"
-      confidence: high
-      framework: [spring-boot, h2]
-      references:
-        - "https://www.h2database.com/html/tutorial.html#console"
-    paths:
-      include: ["**/application.properties", "**/application.yml", "**/application.yaml"]
-    patterns:
-      - pattern-either:
-          - pattern-regex: spring\.h2\.console\.enabled=true
-          - pattern-regex: spring\.h2\.console\.enabled:\s*true
-          - pattern-regex: spring\.h2\.console\.path=/h2-console
-          - pattern-regex: spring\.h2\.console\.path:\s*/h2-console
-
-  - id: spring-hardcoded-secrets
-    message: >
-      Hardcoded secrets detected in configuration. Use environment variables or secret managers.
-      Risk: Critical - credential exposure
-    severity: ERROR
-    languages: [generic]
-    metadata:
-      category: security
-      owasp: "A02:2021"
-      confidence: medium
-      framework: [spring-boot]
-      references:
-        - "https://cheatsheetseries.owasp.org/cheatsheets/Secrets_Management_Cheat_Sheet.html"
-    paths:
-      include: ["**/application.properties", "**/application.yml", "**/application.yaml"]
-    patterns:
-      - pattern-either:
-          - pattern-regex: spring\.datasource\.password=(?!\$\{).+$
-          - pattern-regex: spring\.datasource\.password:\s*(?!\$\{).+$
-          - pattern-regex: (api\.key|secret\.key|jwt\.secret)\s*[:=]\s*(?!\$\{).+$
-
-  # ============================================================
-  # A02:2021 — Cryptographic Failures
+  # SECTION 7: CRYPTOGRAPHIC FAILURES (A02:2021)
   # ============================================================
 
   - id: spring-weak-hashing
     message: >
-      Weak cryptographic hashing algorithm (MD5/SHA-1) detected. Use SHA-256 or bcrypt for passwords.
-      Risk: High - allows hash cracking
+      Weak hashing algorithm (MD5/SHA-1) detected. Use SHA-256 or bcrypt.
     severity: ERROR
     languages: [java]
     metadata:
       category: security
-      owasp: "A02:2021"
+      owasp: "A02:2021-Cryptographic Failures"
       cwe: "CWE-327"
-      confidence: high
-      framework: [spring, spring-security]
-      references:
-        - "https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html"
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
     pattern-either:
       - pattern: MessageDigest.getInstance("MD5")
       - pattern: MessageDigest.getInstance("SHA-1")
-      - pattern: DigestUtils.md5Hex(...)
-      - pattern: DigestUtils.sha1Hex(...)
 
-  - id: spring-insecure-random
+  - id: spring-hardcoded-secrets
     message: >
-      Insecure random number generator (java.util.Random) may be used for security purposes.
-      Use java.security.SecureRandom for tokens, passwords, and security keys.
-      Risk: Medium - predictable random values
-    severity: WARNING
-    languages: [java]
-    metadata:
-      category: security
-      owasp: "A02:2021"
-      cwe: "CWE-330"
-      confidence: medium
-      framework: [spring, spring-security]
-      references:
-        - "https://cheatsheetseries.owasp.org/cheatsheets/Cryptographic_Storage_Cheat_Sheet.html"
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    patterns:
-      - pattern: new java.util.Random(...)
-    # (Optional) tighten further later with metavariable-regex on variable names like token/secret.
-
-  # ============================================================
-  # A10:2021 — SSRF (Server-Side Request Forgery) — High priority
-  # ============================================================
-
-  - id: spring-ssrf-http-client
-    message: >
-      SSRF risk: User-controlled URL reaches an outbound HTTP client call.
-      Validate scheme (http/https), enforce allowlist of hosts, and block internal network ranges.
-      Risk: Critical - can access internal services/metadata endpoints
-    severity: ERROR
-    languages: [java]
-    mode: taint
-    metadata:
-      category: security
-      owasp: "A10:2021"
-      cwe: "CWE-918"
-      confidence: high
-      framework: [spring-boot, spring-mvc]
-      references:
-        - "https://cheatsheetseries.owasp.org/cheatsheets/Server_Side_Request_Forgery_Prevention_Cheat_Sheet.html"
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    pattern-sources:
-      - pattern: request.getParameter(...)
-      - pattern: request.getHeader(...)
-      - pattern: |
-          $RET $M(..., @RequestParam $T $URL, ...) { ... }
-      - pattern: |
-          $RET $M(..., @PathVariable $T $URL, ...) { ... }
-      - pattern: |
-          $RET $M(..., @RequestBody $T $URL, ...) { ... }
-    pattern-sinks:
-      # Spring RestTemplate
-      - pattern: $RT.getForObject($URL, ...)
-      - pattern: $RT.getForEntity($URL, ...)
-      - pattern: $RT.postForObject($URL, ...)
-      - pattern: $RT.exchange($URL, ...)
-      # Spring WebClient
-      - pattern: $WC.get().uri($URL).retrieve()
-      - pattern: $WC.post().uri($URL).retrieve()
-      - pattern: $WC.method(...).uri($URL).retrieve()
-      # JDK / popular clients
-      - pattern: new URL($URL).openStream()
-      - pattern: ((HttpURLConnection) new URL($URL).openConnection())
-      - pattern: $OK.newCall(new Request.Builder().url($URL).build()).execute()
-      - pattern: $HC.execute(new HttpGet($URL))
-      - pattern: $HC.execute(new HttpPost($URL))
-    pattern-sanitizers:
-      # Best-effort URL parsing/validation hooks (still requires host allowlist/internal blocking)
-      - pattern: new URI($URL)
-      - pattern: URI.create($URL)
-
-  - id: spring-ssrf-permissive-scheme
-    message: >
-      SSRF hardening missing: URL is used without enforcing http/https scheme restrictions.
-      Reject file:, jar:, gopher:, ftp:, and other non-http(s) schemes.
-      Risk: High - expands SSRF impact surface
-    severity: WARNING
-    languages: [java]
-    metadata:
-      category: security
-      owasp: "A10:2021"
-      cwe: "CWE-918"
-      confidence: medium
-      framework: [spring-boot]
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    patterns:
-      - pattern-either:
-          - pattern: new URL($URL)
-          - pattern: URI.create($URL)
-      - pattern-not-inside: |
-          if ($U.getScheme().equals("http") || $U.getScheme().equals("https")) { ... }
-
-  # ============================================================
-  # A08:2021 — Software/Data Integrity Failures (Insecure Deserialization)
-  # ============================================================
-
-  - id: spring-insecure-deserialization-java
-    message: >
-      Insecure deserialization detected: ObjectInputStream.readObject() can deserialize untrusted data.
-      Avoid Java native serialization for untrusted input; use safe formats and strict type handling.
-      Risk: Critical - may lead to remote code execution
-    severity: ERROR
-    languages: [java]
-    metadata:
-      category: security
-      owasp: "A08:2021"
-      cwe: "CWE-502"
-      confidence: high
-      framework: [spring-boot]
-      references:
-        - "https://cheatsheetseries.owasp.org/cheatsheets/Deserialization_Cheat_Sheet.html"
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    patterns:
-      - pattern: |
-          ObjectInputStream $OIS = new ObjectInputStream(...);
-          ...
-          $OIS.readObject(...)
-
-  - id: spring-insecure-deserialization-jackson-default-typing
-    message: >
-      Insecure Jackson configuration: Default typing can enable gadget-based deserialization attacks.
-      Avoid enableDefaultTyping / activateDefaultTyping unless you fully control input and restrict subtypes.
-      Risk: High - may enable unsafe polymorphic deserialization
-    severity: ERROR
-    languages: [java]
-    metadata:
-      category: security
-      owasp: "A08:2021"
-      cwe: "CWE-502"
-      confidence: high
-      framework: [spring-boot, jackson]
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    pattern-either:
-      - pattern: $OM.enableDefaultTyping(...)
-      - pattern: $OM.activateDefaultTyping(...)
-
-  - id: spring-insecure-deserialization-snakeyaml
-    message: >
-      SnakeYAML load() on untrusted input can be unsafe depending on configuration and types.
-      Prefer safe constructors and avoid loading arbitrary types.
-      Risk: High - unsafe deserialization / object construction
-    severity: WARNING
-    languages: [java]
-    metadata:
-      category: security
-      owasp: "A08:2021"
-      cwe: "CWE-502"
-      confidence: medium
-      framework: [spring-boot, yaml]
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    patterns:
-      - pattern: |
-          new Yaml(...).load(...)
-
-  # ============================================================
-  # A09:2021 — Security Logging and Monitoring Failures
-  # High value: log injection + audit logging signals
-  # ============================================================
-
-  - id: spring-log-injection
-    message: >
-      Log injection risk: User-controlled input is written to logs without sanitization.
-      Sanitize or structure logs to prevent forged log lines and misleading audit trails.
-      Risk: Medium - can hide attacks or corrupt audit logs
-    severity: WARNING
-    languages: [java]
-    mode: taint
-    metadata:
-      category: security
-      owasp: "A09:2021"
-      cwe: "CWE-117"
-      confidence: medium
-      framework: [spring-boot, logging]
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    pattern-sources:
-      - pattern: request.getParameter(...)
-      - pattern: request.getHeader(...)
-      - pattern: |
-          $RET $M(..., @RequestParam $T $X, ...) { ... }
-      - pattern: |
-          $RET $M(..., @PathVariable $T $X, ...) { ... }
-    pattern-sinks:
-      - pattern: $LOG.info(..., $X, ...)
-      - pattern: $LOG.warn(..., $X, ...)
-      - pattern: $LOG.error(..., $X, ...)
-      - pattern: $LOG.debug(..., $X, ...)
-
-  - id: spring-audit-logging-present
-    message: >
-      Good practice: Security/audit logging appears to be present (security events or audit logger configured).
-    severity: INFO
-    languages: [java]
-    metadata:
-      category: best-practice
-      owasp: "A09:2021"
-      confidence: medium
-      kind: positive-rule
-      framework: [spring-security, logging]
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    pattern-either:
-      - pattern: implements ApplicationListener<AbstractAuthenticationEvent>
-      - pattern: implements ApplicationListener<AuthenticationSuccessEvent>
-      - pattern: implements ApplicationListener<AbstractAuthorizationEvent>
-      - pattern: AuditEventRepository
-      - pattern: @EventListener
-      - pattern: AuthenticationFailureBadCredentialsEvent
-
-  - id: spring-auth-endpoint-missing-audit-logging
-    message: >
-      Possible security logging gap: Auth-related endpoint does not appear to log success/failure events.
-      Consider logging authentication attempts and important security-relevant actions for monitoring.
-      Risk: Medium - weak audit trail
-    severity: WARNING
-    languages: [java]
-    metadata:
-      category: security
-      owasp: "A09:2021"
-      confidence: low
-      framework: [spring-boot, spring-security]
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    patterns:
-      - pattern-either:
-          - pattern: |
-              @PostMapping(...)
-              public $RET login(...) { ... }
-          - pattern: |
-              @RequestMapping(...)
-              public $RET login(...) { ... }
-      - pattern-not-inside: |
-          $LOG.info(...)
-      - pattern-not-inside: |
-          $LOG.warn(...)
-      - pattern-not-inside: |
-          $LOG.error(...)
-
-  # ============================================================
-  # A04:2021 — Insecure Design (design-level heuristics)
-  # ============================================================
-
-  - id: spring-missing-rate-limiting
-    message: >
-      Insecure design heuristic: No rate limiting detected on web endpoints.
-      Consider adding rate limiting (e.g., Bucket4j/Resilience4j) for login and sensitive endpoints.
-      Risk: Medium - increases brute-force and abuse risk
-    severity: WARNING
-    languages: [java]
-    metadata:
-      category: security
-      owasp: "A04:2021"
-      confidence: low
-      framework: [spring-boot]
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    patterns:
-      - pattern: |
-          @RestController
-          class $C { ... }
-      - pattern-not-inside: |
-          @RateLimiter(...)
-          public $RET $M(...) { ... }
-      - pattern-not-inside: |
-          Bucket4j
-      - pattern-not-inside: |
-          RateLimiter
-
-  - id: spring-missing-input-length-constraints
-    message: >
-      Insecure design heuristic: Request parameters lack length constraints.
-      Consider @Size/@Length and explicit maximums to reduce DoS and injection surface.
-      Risk: Low/Medium - depends on endpoint
-    severity: WARNING
-    languages: [java]
-    metadata:
-      category: security
-      owasp: "A04:2021"
-      confidence: low
-      framework: [spring-boot, validation]
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    patterns:
-      - pattern: |
-          public $RET $M(..., @RequestParam String $P, ...) { ... }
-      - pattern-not-inside: |
-          @Size(...)
-          public $RET $M2(...){ ... }
-      - pattern-not-inside: |
-          if ($P.length() ... ) { ... }
-
-  # ============================================================
-  # Advanced Injection Rules (Medium priority)
-  # ============================================================
-
-  - id: spring-command-injection
-    message: >
-      Command injection risk: User input reaches OS command execution APIs.
-      Avoid Runtime.exec/ProcessBuilder with user input; use allowlists and safe APIs.
-      Risk: Critical - remote command execution
-    severity: ERROR
-    languages: [java]
-    mode: taint
-    metadata:
-      category: security
-      owasp: "A03:2021"
-      cwe: "CWE-78"
-      confidence: high
-      framework: [spring-boot]
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    pattern-sources:
-      - pattern: request.getParameter(...)
-      - pattern: request.getHeader(...)
-      - pattern: |
-          $RET $M(..., @RequestParam $T $X, ...) { ... }
-      - pattern: |
-          $RET $M(..., @PathVariable $T $X, ...) { ... }
-    pattern-sinks:
-      - pattern: Runtime.getRuntime().exec($X)
-      - pattern: new ProcessBuilder($X, ...).start()
-      - pattern: $PB.command($X, ...)
-
-  - id: spring-ldap-injection
-    message: >
-      LDAP injection risk: User input used in LDAP filters without escaping.
-      Use parameterized LDAP queries or escape filter characters.
-      Risk: High - authentication bypass / data exposure
-    severity: ERROR
-    languages: [java]
-    mode: taint
-    metadata:
-      category: security
-      owasp: "A03:2021"
-      cwe: "CWE-90"
-      confidence: medium
-      framework: [spring-ldap]
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    pattern-sources:
-      - pattern: request.getParameter(...)
-      - pattern: |
-          $RET $M(..., @RequestParam $T $X, ...) { ... }
-    pattern-sinks:
-      - pattern: $LT.search($BASE, $FILTER, ...)
-      - pattern: $CTX.search($BASE, $FILTER, ...)
-      - pattern: $Q.where($FILTER)
-
-  - id: spring-nosql-injection-mongo
-    message: >
-      NoSQL injection risk: User input reaches MongoDB query construction without constraints.
-      Avoid building query documents from raw input; validate fields and use typed criteria.
-      Risk: High - query manipulation
-    severity: ERROR
-    languages: [java]
-    mode: taint
-    metadata:
-      category: security
-      owasp: "A03:2021"
-      cwe: "CWE-943"
-      confidence: medium
-      framework: [spring-data-mongodb]
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    pattern-sources:
-      - pattern: request.getParameter(...)
-      - pattern: |
-          $RET $M(..., @RequestParam $T $X, ...) { ... }
-    pattern-sinks:
-      - pattern: new BasicQuery($X)
-      - pattern: $MT.find($X, ...)
-      - pattern: $MT.findOne($X, ...)
-
-  # ============================================================
-  # Dependency / Supply Chain Heuristics (Medium priority)
-  # Best-effort (does not do CVE/version reasoning by itself)
-  # ============================================================
-
-  - id: spring-dependency-devtools-present
-    message: >
-      Spring Boot DevTools detected. Remove from production dependencies - enables hot reload and debugging.
-      Risk: High - development features in production
+      Hardcoded secrets in configuration. Use environment variables.
     severity: ERROR
     languages: [generic]
     metadata:
       category: security
-      owasp: "A08:2021"
-      confidence: medium
-      framework: [spring-boot]
-      references:
-        - "https://docs.spring.io/spring-boot/docs/current/reference/html/using.html#using.devtools"
+      owasp: "A02:2021-Cryptographic Failures"
     paths:
-      include: ["**/pom.xml", "**/build.gradle", "**/build.gradle.kts"]
+      include: ["**/application.properties", "**/application.yml"]
+    patterns:
+      - pattern-regex: (password|secret|key|token)\s*[:=]\s*[A-Za-z0-9]{8,}
+
+  # ============================================================
+  # SECTION 8: VULNERABLE & OUTDATED COMPONENTS (A06:2021)
+  # ============================================================
+
+  - id: spring-devtools-production
+    message: >
+      Spring Boot DevTools in build file. Ensure this is marked <optional>true</optional> or scope 'runtime'.
+    severity: ERROR
+    languages: [generic]
+    metadata:
+      category: security
+      owasp: "A06:2021-Vulnerable and Outdated Components"
+    paths:
+      include: ["pom.xml", "build.gradle"]
     patterns:
       - pattern-regex: spring-boot-devtools
 
-  - id: spring-dependency-jitpack-or-raw-git-deps
+  - id: spring-actuator-exposed
     message: >
-      Supply chain risk heuristic: Non-standard dependency source detected (e.g., JitPack or raw Git dependencies).
-      Prefer trusted repositories and pin versions/commits.
-      Risk: Medium - integrity and provenance concerns
-    severity: WARNING
+      Actuator endpoints exposed ('*'). Limit exposure to specific endpoints (health, info).
+    severity: ERROR
     languages: [generic]
     metadata:
       category: security
-      owasp: "A08:2021"
-      confidence: low
-      framework: [spring-boot]
+      owasp: "A06:2021-Vulnerable and Outdated Components"
     paths:
-      include: ["**/pom.xml", "**/build.gradle", "**/build.gradle.kts", "**/settings.gradle", "**/settings.gradle.kts"]
+      include: ["**/application.properties", "**/application.yml"]
     patterns:
-      - pattern-either:
-          - pattern-regex: jitpack\.io
-          - pattern-regex: maven\s*\{\s*url\s*['"]https?://.*github\.com
-          - pattern-regex: implementation\s*\(\s*['"].*github:.*
+      - pattern-regex: management\.endpoints\.web\.exposure\.include=\*
 
   # ============================================================
-  # Tutorial-specific vulnerabilities
+  # SECTION 9: TUTORIAL SPECIFIC & BAD PRACTICES
   # ============================================================
 
   - id: spring-tutorial-credentials
     message: >
-      Tutorial hardcoded credentials detected. Avoid default credentials patterns in any deployed code.
-      Risk: Critical - known default credentials
+      Hardcoded tutorial credentials detected.
     severity: ERROR
     languages: [java]
     metadata:
       category: security
-      framework: [spring-boot]
-      tutorial: baeldung
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
+      tutorial: true
     pattern-either:
       - pattern: user.equalsIgnoreCase("in28Minutes")
-      - pattern: password.equals("dummy")
-      - pattern: username.equalsIgnoreCase("admin")
-      - pattern: pass.equals("password123")
+      - pattern-regex: "(?i)password\\s*=\\s*[\"'](dummy|password|admin)[\"']"
 
-  - id: spring-tutorial-no-security
+  - id: spring-print-stacktrace
     message: >
-      Tutorial code without visible security configuration. Educational code should not be used in production.
-      Add proper Spring Security configuration before deployment.
+      e.printStackTrace() prints sensitive info to stdout. Use a logger.
     severity: WARNING
     languages: [java]
-    metadata:
-      category: security
-      framework: [spring-boot]
-      tutorial: baeldung
-    paths:
-      include: ["**/tutorial/**", "**/example/**", "**/demo/**", "**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    patterns:
-      - pattern: |
-          @SpringBootApplication
-          class $APP {
-            public static void main(String[] args) {
-              SpringApplication.run($APP.class, args);
-            }
-          }
-      - pattern-not-inside: |
-          SecurityFilterChain $F(...) { ... }
-      - pattern-not-inside: |
-          @EnableWebSecurity
-          class $SECURITY { ... }
+    pattern: $E.printStackTrace()
 
   # ============================================================
-  # Spring Boot configuration hygiene
-  # ============================================================
-
-  - id: spring-banner-info-disclosure
-    message: >
-      Spring Boot banner shows version information. Disable with spring.main.banner-mode=off
-      Risk: Low - framework version exposure
-    severity: INFO
-    languages: [generic]
-    metadata:
-      category: security
-      owasp: "A05:2021"
-      confidence: low
-      framework: [spring-boot]
-      references:
-        - "https://docs.spring.io/spring-boot/docs/current/reference/html/features.html#features.spring-application.banner"
-    paths:
-      include: ["**/application.properties", "**/application.yml", "**/application.yaml"]
-    patterns:
-      - pattern-either:
-          - pattern-regex: spring\.main\.banner-mode=console
-          - pattern-regex: spring\.main\.banner-mode:\s*console
-      - pattern-not-regex: spring\.main\.banner-mode\s*[:=]\s*off
-
-  - id: spring-management-security-disabled
-    message: >
-      Spring Boot management security disabled or overly exposed. Management endpoints may leak sensitive data.
-      Risk: High - sensitive information exposure
-    severity: ERROR
-    languages: [generic]
-    metadata:
-      category: security
-      owasp: "A05:2021"
-      confidence: medium
-      framework: [spring-boot, spring-security]
-      references:
-        - "https://docs.spring.io/spring-boot/docs/current/reference/html/actuator.html#actuator.endpoints.security"
-    paths:
-      include: ["**/application.properties", "**/application.yml", "**/application.yaml"]
-    patterns:
-      - pattern-either:
-          - pattern-regex: management\.security\.enabled=false
-          - pattern-regex: management\.security\.enabled:\s*false
-          - pattern-regex: management\.endpoints\.web\.exposure\.include=\*
-          - pattern-regex: management\.endpoints\.web\.exposure\.include:\s*"\*"
-          - pattern-regex: management\.endpoints\.web\.exposure\.include:\s*\*
-
-  - id: spring-cors-wildcard
-    message: >
-      Permissive CORS configuration with wildcard origins. Specify explicit allowed origins.
-      Risk: Medium - allows any domain to access API
-    severity: WARNING
-    languages: [java]
-    metadata:
-      category: security
-      owasp: "A05:2021"
-      confidence: medium
-      framework: [spring-mvc]
-      references:
-        - "https://cheatsheetseries.owasp.org/cheatsheets/HTML5_Security_Cheat_Sheet.html#cors"
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    pattern-either:
-      - pattern: allowedOrigins("*")
-      - pattern: setAllowedOrigins(...)
-      - pattern: |
-          @CrossOrigin(origins = "*")
-      - pattern: setAllowedOriginPatterns("*")
-
-  # ============================================================
-  # A04:2021 — Mass Assignment / Data Binding
-  # ============================================================
-
-  - id: spring-mass-assignment-direct-entity
-    message: >
-      Direct entity binding detected: @RequestBody on JPA entity without validation.
-      Use DTOs or @Valid with field allowlisting via @InitBinder.
-      Risk: High - mass assignment vulnerability
-    severity: ERROR
-    languages: [java]
-    metadata:
-      category: security
-      owasp: "A04:2021"
-      cwe: "CWE-915"
-      confidence: medium
-      framework: [spring-boot, jpa]
-      references:
-        - "https://cheatsheetseries.owasp.org/cheatsheets/Mass_Assignment_Cheat_Sheet.html"
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    patterns:
-      - pattern: |
-          @Entity
-          class $ENTITY { ... }
-
-          @RestController
-          class $CONTROLLER {
-            @PostMapping(...)
-            public $RET create(@RequestBody $ENTITY $PARAM) {
-              ...
-            }
-          }
-      - pattern-not-inside: |
-          public $RET create(@Valid @RequestBody $ENTITY $PARAM) { ... }
-
-  # ============================================================
-  # POSITIVE SECURITY PATTERNS (GOOD PRACTICES)
+  # SECTION 10: POSITIVE SECURITY PATTERNS
   # ============================================================
 
   - id: spring-security-enabled
     message: >
-      Good practice: Spring Security configured with authentication and authorization rules.
+      Good practice: Spring Security configured.
     severity: INFO
     languages: [java]
     metadata:
-      category: best-practice
-      confidence: high
       kind: positive-rule
-      framework: [spring-security]
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    pattern-either:
-      - pattern: |
-          @EnableWebSecurity
-          class $SECURITYCONFIG { ... }
-      - pattern: |
-          @Bean
-          SecurityFilterChain $F(HttpSecurity $HTTP) { ... }
-
-  - id: spring-valid-annotation-used
-    message: >
-      Good practice: Input validation with @Valid annotation and Bean Validation constraints.
-    severity: INFO
-    languages: [java]
-    metadata:
-      category: best-practice
-      confidence: high
-      kind: positive-rule
-      framework: [spring-boot]
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
-    pattern: |
-      public $RET $METHOD(..., @Valid @RequestBody $TYPE $PARAM, ...){ ... }
-
-  - id: spring-secure-cookie-config
-    message: >
-      Good practice: Security headers and session hardening configured (HSTS/frame options/session policy).
-    severity: INFO
-    languages: [java]
-    metadata:
-      category: best-practice
-      confidence: medium
-      kind: positive-rule
-      framework: [spring-security]
-    paths:
-      include: ["**/*.java"]
-      exclude: ["**/test/**", "**/*Test.java", "**/Test*.java", "**/target/**", "**/build/**"]
     patterns:
       - pattern: |
-          $HTTP.headers(...)
-      - pattern-inside: |
-          SecurityFilterChain $F(...) { ... }
+          @EnableWebSecurity
+          class $SECURITY { ... }
