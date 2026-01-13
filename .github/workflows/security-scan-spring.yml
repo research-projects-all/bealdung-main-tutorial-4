@@ -1,0 +1,171 @@
+name: Spring Semgrep - Custom (logs only)
+
+on:
+  push:
+    branches: [ main, develop, "security/*" ]
+    paths:
+      - "**/*.java"
+      - "**/*.kt"
+      - "pom.xml"
+      - "**/pom.xml"
+      - "build.gradle"
+      - "build.gradle.kts"
+      - "**/build.gradle"
+      - "**/build.gradle.kts"
+      - ".semgrep/**"
+      - ".github/workflows/security-scan-spring.yml"
+  pull_request:
+    branches: [ main, develop ]
+    paths:
+      - "**/*.java"
+      - "**/*.kt"
+      - "pom.xml"
+      - "**/pom.xml"
+      - "build.gradle"
+      - "build.gradle.kts"
+      - "**/build.gradle"
+      - "**/build.gradle.kts"
+      - ".semgrep/**"
+      - ".github/workflows/security-scan-spring.yml"
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+    inputs:
+      scan_type:
+        description: "Type of security scan"
+        required: true
+        default: "full"
+        type: choice
+        options: [ "full", "quick", "spring-only", "java-only" ]
+      fail_on_findings:
+        description: "Fail workflow if ERROR findings detected"
+        required: false
+        default: true
+        type: boolean
+
+env:
+  JAVA_VERSION: "17"
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  semgrep:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: ${{ env.JAVA_VERSION }}
+
+      # Semgrep is easiest to install via pip (same pattern as your Django workflow)
+      - name: Setup Python (for Semgrep install)
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Semgrep + jq
+        run: |
+          python -m pip install --upgrade pip
+          pip install semgrep
+          sudo apt-get update -y
+          sudo apt-get install -y jq
+
+      - name: Debug File Path
+        run: |
+          pwd
+          ls -R
+
+      - name: Validate Semgrep Rules
+        run: semgrep validate .semgrep/spring-security-rules.yml
+
+      - name: Run Semgrep (logs)
+        run: |
+          set -euo pipefail
+
+          # Inputs exist only for workflow_dispatch; for push/PR/schedule they are empty.
+          SCAN_TYPE="${{ github.event.inputs.scan_type }}"
+          FAIL_ON_FINDINGS="${{ github.event.inputs.fail_on_findings }}"
+
+          if [ -z "${SCAN_TYPE:-}" ]; then SCAN_TYPE="full"; fi
+          if [ -z "${FAIL_ON_FINDINGS:-}" ]; then FAIL_ON_FINDINGS="true"; fi
+
+          TIMEOUT=900
+          INCLUDE_ARGS=( "--include" "**/*.java" "--include" "**/*.kt" )
+
+          if [ "$SCAN_TYPE" = "quick" ]; then
+            TIMEOUT=300
+            INCLUDE_ARGS=(
+              "--include" "**/*Controller.java"
+              "--include" "**/*RestController.java"
+              "--include" "**/Security*.java"
+              "--include" "**/*SecurityConfig.java"
+              "--include" "**/*WebSecurity*.java"
+              "--include" "**/*Config.java"
+            )
+          elif [ "$SCAN_TYPE" = "spring-only" ]; then
+            TIMEOUT=600
+            INCLUDE_ARGS=(
+              "--include" "**/src/main/java/**/*.java"
+              "--include" "**/src/main/kotlin/**/*.kt"
+              "--include" "**/*Controller.java"
+              "--include" "**/*Service.java"
+              "--include" "**/*Repository.java"
+              "--include" "**/Security*.java"
+            )
+          elif [ "$SCAN_TYPE" = "java-only" ]; then
+            TIMEOUT=450
+            INCLUDE_ARGS=(
+              "--include" "**/*.java"
+              "--include" "**/*.kt"
+              "--exclude" "**/src/test/**"
+              "--exclude" "**/*Test.java"
+              "--exclude" "**/*Tests.java"
+              "--exclude" "**/target/**"
+              "--exclude" "**/build/**"
+            )
+          fi
+
+          echo "=== Semgrep Spring scan start ==="
+          echo "scan_type=$SCAN_TYPE timeout=$TIMEOUT fail_on_findings=$FAIL_ON_FINDINGS"
+
+          semgrep scan \
+            --config .semgrep/spring-security-rules.yml \
+            --metrics=off \
+            --no-git-ignore \
+            --json --output semgrep-results.json \
+            --time \
+            --timeout "$TIMEOUT" \
+            "${INCLUDE_ARGS[@]}"
+
+          echo ""
+          echo "=== Summary ==="
+          TOTAL=$(jq '.results | length' semgrep-results.json)
+          ERRORS=$(jq '[.results[] | select(.extra.severity=="ERROR")] | length' semgrep-results.json)
+          WARNINGS=$(jq '[.results[] | select(.extra.severity=="WARNING")] | length' semgrep-results.json)
+          INFOS=$(jq '[.results[] | select(.extra.severity=="INFO")] | length' semgrep-results.json)
+
+          echo "Total:   $TOTAL"
+          echo "ERROR:   $ERRORS"
+          echo "WARNING: $WARNINGS"
+          echo "INFO:    $INFOS"
+
+          echo ""
+          echo "=== Findings ==="
+          jq -r '.results
+            | sort_by(.check_id, .path, .start.line)
+            | .[]
+            | "\(.extra.severity) | \(.check_id) | \(.path):\(.start.line) | \(.extra.message)"' \
+            semgrep-results.json
+
+          if [ "$FAIL_ON_FINDINGS" = "true" ] && [ "$ERRORS" -gt 0 ]; then
+            echo ""
+            echo "❌ Failing because ERROR findings > 0"
+            exit 1
+          fi
+
+          echo "=== Semgrep Spring scan end ==="
