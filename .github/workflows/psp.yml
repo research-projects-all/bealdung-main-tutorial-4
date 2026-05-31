@@ -1,0 +1,32 @@
+name: PSP Pedagogical Security Scan
+
+on:
+  push:
+    branches: [main, master, develop]
+  pull_request:
+    branches: [main, master]
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  psp:
+    name: Run Pedagogical SAST Profile
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      security-events: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+
+      - name: Pedagogical SAST Profile PSP
+        uses: research-projects-all/Pedagogical-SAST-Profile-PSP@v2.0.0
+        with:
+          framework: auto
+          scan-path: .
+          output-format: sarif
+          output-file: psp-results.sarif
+          fail-on-finding: false
